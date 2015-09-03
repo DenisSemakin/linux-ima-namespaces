@@ -24,6 +24,7 @@
 #include <linux/hash.h>
 #include <linux/tpm.h>
 #include <linux/audit.h>
+#include <linux/ima.h>
 #include <crypto/hash_info.h>
 
 #include "../integrity.h"
@@ -292,6 +293,10 @@ static inline int ima_read_xattr(struct dentry *dentry,
 
 #endif /* CONFIG_IMA_APPRAISE */
 
+int ima_ns_init(void);
+struct ima_namespace;
+int ima_init_namespace(struct ima_namespace *ns);
+
 /* LSM based policy rules require audit */
 #ifdef CONFIG_IMA_LSM_RULES
 
@@ -313,6 +318,33 @@ static inline int security_filter_rule_match(u32 secid, u32 field, u32 op,
 	return -EINVAL;
 }
 #endif /* CONFIG_IMA_LSM_RULES */
+
+static inline struct ima_namespace *to_ima_ns(struct ns_common *ns)
+{
+	return container_of(ns, struct ima_namespace, ns);
+}
+
+#ifdef CONFIG_IMA_NS
+
+extern const struct proc_ns_operations imans_operations;
+
+struct ima_namespace *copy_ima(struct user_namespace *user_ns,
+			       struct ima_namespace *old_ns);
+
+
+static inline struct ima_namespace *get_current_ns(void)
+{
+	return current->nsproxy->ima_ns;
+}
+
+#else
+
+static inline struct ima_namespace *get_current_ns(void)
+{
+	return &init_ima_ns;
+}
+
+#endif /* CONFIG_IMA_NS */
 
 #ifdef	CONFIG_IMA_READ_POLICY
 #define	POLICY_FILE_FLAGS	(S_IWUSR | S_IRUSR)

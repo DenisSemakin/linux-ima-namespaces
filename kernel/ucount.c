@@ -80,6 +80,7 @@ static struct ctl_table user_table[] = {
 	UCOUNT_ENTRY("max_inotify_instances"),
 	UCOUNT_ENTRY("max_inotify_watches"),
 #endif
+	UCOUNT_ENTRY("max_ima_namespaces"),
 	{ }
 };
 #endif /* CONFIG_SYSCTL */

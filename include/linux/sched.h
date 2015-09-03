@@ -54,6 +54,7 @@ struct sighand_struct;
 struct signal_struct;
 struct task_delay_info;
 struct task_group;
+struct ima_namespace;
 
 /*
  * Task state bitmask. NOTE! These bits are also
@@ -1190,6 +1191,11 @@ struct task_struct {
 #ifdef CONFIG_SECURITY
 	/* Used by LSM modules for access restriction: */
 	void				*security;
+#endif
+
+#ifdef CONFIG_IMA_NS
+	/* child process will spawn a new IMA namespace */
+	bool                            ima_ns_for_child;
 #endif
 
 	/*

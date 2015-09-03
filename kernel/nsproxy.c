@@ -27,6 +27,7 @@
 #include <linux/syscalls.h>
 #include <linux/cgroup.h>
 #include <linux/perf_event.h>
+#include <linux/ima.h>
 
 static struct kmem_cache *nsproxy_cachep;
 
@@ -43,6 +44,9 @@ struct nsproxy init_nsproxy = {
 #endif
 #ifdef CONFIG_CGROUPS
 	.cgroup_ns		= &init_cgroup_ns,
+#endif
+#ifdef CONFIG_IMA_NS
+	.ima_ns			= &init_ima_ns,
 #endif
 };
 
@@ -67,6 +71,7 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 {
 	struct nsproxy *new_nsp;
 	int err;
+	bool copy_ima = false;
 
 	new_nsp = create_nsproxy();
 	if (!new_nsp)
@@ -110,8 +115,21 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 		goto out_net;
 	}
 
+#ifdef CONFIG_IMA_NS
+	copy_ima = tsk->ima_ns_for_child;
+	tsk->ima_ns_for_child = false;
+#endif
+	new_nsp->ima_ns = copy_ima_ns(copy_ima, user_ns,
+				      tsk->nsproxy->ima_ns);
+	if (IS_ERR(new_nsp->ima_ns)) {
+		err = PTR_ERR(new_nsp->ima_ns);
+		goto out_ima;
+	}
+
 	return new_nsp;
 
+out_ima:
+	put_net(new_nsp->net_ns);
 out_net:
 	put_cgroup_ns(new_nsp->cgroup_ns);
 out_cgroup:
@@ -143,7 +161,11 @@ int copy_namespaces(unsigned long flags, struct task_struct *tsk)
 
 	if (likely(!(flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC |
 			      CLONE_NEWPID | CLONE_NEWNET |
-			      CLONE_NEWCGROUP)))) {
+			      CLONE_NEWCGROUP)))
+#ifdef CONFIG_IMA_NS
+	    && likely(!tsk->ima_ns_for_child)
+#endif
+	) {
 		get_nsproxy(old_ns);
 		return 0;
 	}
@@ -182,6 +204,7 @@ void free_nsproxy(struct nsproxy *ns)
 		put_pid_ns(ns->pid_ns_for_children);
 	put_cgroup_ns(ns->cgroup_ns);
 	put_net(ns->net_ns);
+	put_ima_ns(ns->ima_ns);
 	kmem_cache_free(nsproxy_cachep, ns);
 }
 

@@ -112,4 +112,54 @@ static inline int ima_inode_removexattr(struct dentry *dentry,
 	return 0;
 }
 #endif /* CONFIG_IMA_APPRAISE */
+
+struct ima_namespace {
+	struct kref kref;
+	struct user_namespace *user_ns;
+	struct ucounts *ucounts;
+	struct ns_common ns;
+	struct ima_namespace *parent;
+};
+
+extern struct ima_namespace init_ima_ns;
+
+#ifdef CONFIG_IMA_NS
+
+struct ima_namespace *copy_ima_ns(bool copy, struct user_namespace *user_ns,
+				  struct ima_namespace *old_ns);
+
+void free_ima_ns(struct kref *kref);
+
+static inline struct ima_namespace *get_ima_ns(struct ima_namespace *ns)
+{
+	if (ns)
+		kref_get(&ns->kref);
+	return ns;
+}
+
+static inline void put_ima_ns(struct ima_namespace *ns)
+{
+	if (ns)
+		kref_put(&ns->kref, free_ima_ns);
+}
+
+#else
+
+static inline struct ima_namespace *copy_ima_ns(bool copy,
+						struct user_namespace *user_ns,
+						struct ima_namespace *old_ns)
+{
+	return old_ns;
+}
+
+static inline struct ima_namespace *get_ima_ns(struct ima_namespace *ns)
+{
+	return ns;
+}
+
+static inline void put_ima_ns(struct ima_namespace *ns)
+{
+}
+
+#endif /* CONFIG_IMA_NS */
 #endif /* _LINUX_IMA_H */

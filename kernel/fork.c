@@ -91,6 +91,7 @@
 #include <linux/kcov.h>
 #include <linux/livepatch.h>
 #include <linux/thread_info.h>
+#include <linux/ima.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -873,6 +874,10 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
+#endif
+
+#ifdef CONFIG_IMA_NS
+	orig->ima_ns_for_child = false;
 #endif
 	return tsk;
 

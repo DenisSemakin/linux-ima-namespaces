@@ -365,6 +365,9 @@ static struct dentry *ascii_runtime_measurements;
 static struct dentry *runtime_measurements_count;
 static struct dentry *violations;
 static struct dentry *ima_policy;
+#ifdef CONFIG_IMA_NS
+static struct dentry *unshare;
+#endif
 
 enum ima_fs_flags {
 	IMA_FS_BUSY,
@@ -452,6 +455,47 @@ static const struct file_operations ima_measure_policy_ops = {
 	.llseek = generic_file_llseek,
 };
 
+#ifdef CONFIG_IMA_NS
+static int ima_open_unshare(struct inode *inode, struct file *filp)
+{
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	return 0;
+}
+
+static ssize_t ima_write_unshare(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	ssize_t length;
+	char *page;
+	bool set;
+
+	if (count >= PAGE_SIZE)
+		return -ENOMEM;
+
+	page = memdup_user_nul(buf, count);
+	if (IS_ERR(page))
+		return PTR_ERR(page);
+
+	length = -EINVAL;
+	if (kstrtobool(page, &set))
+		goto out;
+
+	current->ima_ns_for_child = set;
+
+	length = count;
+out:
+	kfree(page);
+
+	return length;
+}
+
+static const struct file_operations ima_unshare_ops = {
+	.open = ima_open_unshare,
+	.write = ima_write_unshare,
+};
+#endif
+
 int __init ima_fs_init(void)
 {
 	ima_dir = securityfs_create_dir("ima", integrity_dir);
@@ -496,6 +540,14 @@ int __init ima_fs_init(void)
 	if (IS_ERR(ima_policy))
 		goto out;
 
+#ifdef CONFIG_IMA_NS
+	unshare = securityfs_create_file("unshare", 0200,
+					 ima_dir, NULL,
+					 &ima_unshare_ops);
+	if (IS_ERR(unshare))
+		goto out;
+#endif
+
 	return 0;
 out:
 	securityfs_remove(violations);
@@ -505,5 +557,8 @@ out:
 	securityfs_remove(ima_symlink);
 	securityfs_remove(ima_dir);
 	securityfs_remove(ima_policy);
+#ifdef CONFIG_IMA_NS
+	securityfs_remove(unshare);
+#endif
 	return -1;
 }
