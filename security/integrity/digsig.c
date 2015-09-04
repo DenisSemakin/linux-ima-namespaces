@@ -19,12 +19,11 @@
 #include <linux/key-type.h>
 #include <linux/digsig.h>
 #include <linux/vmalloc.h>
+#include <linux/ima.h>
 #include <crypto/public_key.h>
 #include <keys/system_keyring.h>
 
 #include "integrity.h"
-
-static struct key *keyring[INTEGRITY_KEYRING_MAX];
 
 static const char *keyring_name[INTEGRITY_KEYRING_MAX] = {
 #ifndef CONFIG_INTEGRITY_TRUSTED_KEYRING
@@ -49,30 +48,45 @@ static bool init_keyring __initdata;
 #define restrict_link_to_ima restrict_link_by_builtin_trusted
 #endif
 
-int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
-			    const char *digest, int digestlen)
+static const char *integrity_get_keyring_name(struct ima_namespace *ns,
+					      const unsigned int id)
 {
-	if (id >= INTEGRITY_KEYRING_MAX || siglen < 2)
-		return -EINVAL;
+	switch (id) {
+	case INTEGRITY_KEYRING_IMA:
+		return ns->ima_keyring;
+	case INTEGRITY_KEYRING_EVM:
+		return ns->evm_keyring;
+	default:
+		return keyring_name[id];
+	}
+}
 
-	if (!keyring[id]) {
-		keyring[id] =
-			request_key(&key_type_keyring, keyring_name[id], NULL);
-		if (IS_ERR(keyring[id])) {
-			int err = PTR_ERR(keyring[id]);
-			pr_err("no %s keyring: %d\n", keyring_name[id], err);
-			keyring[id] = NULL;
+int integrity_digsig_verify(struct ima_namespace *ns, const unsigned int id,
+			    const char *sig, int siglen, const char *digest,
+			    int digestlen)
+{
+	struct key *ima_keyring;
+
+	if (!ns->keyring[id]) {
+		ima_keyring = request_key(&key_type_keyring,
+		                          integrity_get_keyring_name(ns, id), NULL);
+		if (IS_ERR(ima_keyring)) {
+			int err = PTR_ERR(ima_keyring);
+
+			pr_err("no %s keyring: %d\n", ns->ima_keyring, err);
+			ima_keyring = NULL;
 			return err;
 		}
+		ns->keyring[id] = ima_keyring;
 	}
 
 	switch (sig[1]) {
 	case 1:
 		/* v1 API expect signature without xattr type */
-		return digsig_verify(keyring[id], sig + 1, siglen - 1,
+		return digsig_verify(ns->keyring[id], sig + 1, siglen - 1,
 				     digest, digestlen);
 	case 2:
-		return asymmetric_verify(keyring[id], sig, siglen,
+		return asymmetric_verify(ns->keyring[id], sig, siglen,
 					 digest, digestlen);
 	}
 
@@ -94,18 +108,18 @@ int __init integrity_init_keyring(const unsigned int id)
 
 	restriction->check = restrict_link_to_ima;
 
-	keyring[id] = keyring_alloc(keyring_name[id], KUIDT_INIT(0),
+	init_ima_ns.keyring[id] = keyring_alloc(keyring_name[id], KUIDT_INIT(0),
 				    KGIDT_INIT(0), cred,
 				    ((KEY_POS_ALL & ~KEY_POS_SETATTR) |
 				     KEY_USR_VIEW | KEY_USR_READ |
 				     KEY_USR_WRITE | KEY_USR_SEARCH),
 				    KEY_ALLOC_NOT_IN_QUOTA,
 				    restriction, NULL);
-	if (IS_ERR(keyring[id])) {
-		err = PTR_ERR(keyring[id]);
+	if (IS_ERR(init_ima_ns.keyring[id])) {
+		err = PTR_ERR(init_ima_ns.keyring[id]);
 		pr_info("Can't allocate %s keyring (%d)\n",
 			keyring_name[id], err);
-		keyring[id] = NULL;
+		init_ima_ns.keyring[id] = NULL;
 	}
 	return err;
 }
@@ -117,7 +131,7 @@ int __init integrity_load_x509(const unsigned int id, const char *path)
 	loff_t size;
 	int rc;
 
-	if (!keyring[id])
+	if (!init_ima_ns.keyring[id])
 		return -EINVAL;
 
 	rc = kernel_read_file_from_path(path, &data, &size, 0,
@@ -127,7 +141,7 @@ int __init integrity_load_x509(const unsigned int id, const char *path)
 		return rc;
 	}
 
-	key = key_create_or_update(make_key_ref(keyring[id], 1),
+	key = key_create_or_update(make_key_ref(init_ima_ns.keyring[id], 1),
 				   "asymmetric",
 				   NULL,
 				   data,

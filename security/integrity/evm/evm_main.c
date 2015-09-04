@@ -192,7 +192,8 @@ static enum integrity_status evm_verify_hmac(struct dentry *dentry,
 				   xattr_value_len, xattr_data->type, &digest);
 		if (rc)
 			break;
-		rc = integrity_digsig_verify(INTEGRITY_KEYRING_EVM,
+		rc = integrity_digsig_verify(current->nsproxy->ima_ns,
+		                        INTEGRITY_KEYRING_EVM,
 					(const char *)xattr_data, xattr_len,
 					digest.digest, digest.hdr.length);
 		if (!rc) {

@@ -123,11 +123,6 @@ struct integrity_iint_cache {
 	u64 version;		/* track inode changes */
 	unsigned long flags;
 	unsigned long atomic_flags;
-	enum integrity_status ima_file_status:4;
-	enum integrity_status ima_mmap_status:4;
-	enum integrity_status ima_bprm_status:4;
-	enum integrity_status ima_read_status:4;
-	enum integrity_status ima_creds_status:4;
 	enum integrity_status evm_status:4;
 	struct ima_digest_data *ima_hash;
 	rwlock_t ns_list_lock;
@@ -170,14 +165,16 @@ extern struct dentry *integrity_dir;
 
 #ifdef CONFIG_INTEGRITY_SIGNATURE
 
-int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
-			    const char *digest, int digestlen);
+int integrity_digsig_verify(struct ima_namespace *ns, const unsigned int id,
+			    const char *sig, int siglen, const char *digest,
+			    int digestlen);
 
 int __init integrity_init_keyring(const unsigned int id);
 int __init integrity_load_x509(const unsigned int id, const char *path);
 #else
 
-static inline int integrity_digsig_verify(const unsigned int id,
+static inline int integrity_digsig_verify(struct ima_namespace *ns,
+					  const unsigned int id,
 					  const char *sig, int siglen,
 					  const char *digest, int digestlen)
 {

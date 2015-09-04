@@ -134,6 +134,11 @@ struct ns_status {
 	u32 i_generation;
 	unsigned long flags;
 	unsigned long measured_pcrs;
+	enum integrity_status ima_file_status:4;
+	enum integrity_status ima_mmap_status:4;
+	enum integrity_status ima_bprm_status:4;
+	enum integrity_status ima_read_status:4;
+	enum integrity_status ima_creds_status:4;
 };
 
 static inline struct ns_status *ns_status_get(struct ns_status *status)
@@ -298,11 +303,13 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct integrity_iint_cache *iint,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
-			     int xattr_len);
+			     int xattr_len,
+			     struct ima_namespace *ns,
+			     struct ns_status *ns_status);
 int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
 		      struct user_namespace *user_ns);
 void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
-enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
+enum integrity_status ima_get_cache_status(struct ns_status *status,
 					   enum ima_hooks func);
 enum hash_algo ima_get_hash_algo(struct evm_ima_xattr_data *xattr_value,
 				 int xattr_len);
@@ -315,7 +322,9 @@ static inline int ima_appraise_measurement(enum ima_hooks func,
 					   struct file *file,
 					   const unsigned char *filename,
 					   struct evm_ima_xattr_data *xattr_value,
-					   int xattr_len)
+					   int xattr_len,
+					   struct ima_namespace *ns,
+					   struct ns_status *ns_status)
 {
 	return INTEGRITY_UNKNOWN;
 }
@@ -353,8 +362,11 @@ static inline int ima_read_xattr(struct dentry *dentry,
 
 #endif /* CONFIG_IMA_APPRAISE */
 
-#define IMA_NS_STATUS_ACTIONS   (IMA_AUDIT | IMA_MEASURE)
-#define IMA_NS_STATUS_FLAGS     (IMA_AUDITED | IMA_MEASURED)
+#define IMA_NS_STATUS_ACTIONS   (IMA_AUDIT | IMA_MEASURE | IMA_APPRAISE)
+#define IMA_NS_STATUS_FLAGS     (IMA_AUDITED | IMA_MEASURED | IMA_APPRAISED | \
+				 IMA_MMAP_APPRAISED | IMA_BPRM_APPRAISED | \
+				 IMA_FILE_APPRAISED | IMA_READ_APPRAISED | \
+				 IMA_CREDS_APPRAISED)
 
 int ima_ns_init(void);
 struct ima_namespace;

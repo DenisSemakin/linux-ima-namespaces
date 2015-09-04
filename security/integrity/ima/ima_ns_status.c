@@ -198,6 +198,11 @@ get_new:
 	status->flags = 0UL;
 	status->ns = ns;
 	status->measured_pcrs = 0;
+	status->ima_file_status = INTEGRITY_UNKNOWN;
+	status->ima_mmap_status = INTEGRITY_UNKNOWN;
+	status->ima_bprm_status = INTEGRITY_UNKNOWN;
+	status->ima_read_status = INTEGRITY_UNKNOWN;
+	status->ima_creds_status = INTEGRITY_UNKNOWN;
 
 	write_lock(&iint->ns_list_lock);
 	if (list_empty(&status->ns_next))

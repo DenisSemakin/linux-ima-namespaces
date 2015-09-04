@@ -739,8 +739,7 @@ static void ima_log_string(struct audit_buffer *ab, char *key, char *value)
 	ima_log_string_op(ab, key, value, NULL);
 }
 
-static int ima_parse_rule(char *rule, struct ima_rule_entry *entry,
-			  struct ima_namespace *ns)
+static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 {
 	struct audit_buffer *ab;
 	char *from;
@@ -784,9 +783,6 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry,
 			entry->action = DONT_MEASURE;
 			break;
 		case Opt_appraise:
-			if (ns != &init_ima_ns)
-				result = -EPERM;
-
 			ima_log_string(ab, "action", "appraise");
 
 			if (entry->action != UNKNOWN)
@@ -1096,7 +1092,7 @@ ssize_t ima_parse_add_rule(char *rule, struct ima_namespace *ns)
 
 	INIT_LIST_HEAD(&entry->list);
 
-	result = ima_parse_rule(p, entry, ns);
+	result = ima_parse_rule(p, entry);
 	if (result) {
 		kfree(entry);
 		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL,

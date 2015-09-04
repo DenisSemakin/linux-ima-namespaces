@@ -76,71 +76,75 @@ static int ima_fix_xattr(struct dentry *dentry,
 }
 
 /* Return specific func appraised cached result */
-enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
+enum integrity_status ima_get_cache_status(struct ns_status *status,
 					   enum ima_hooks func)
 {
 	switch (func) {
 	case MMAP_CHECK:
-		return iint->ima_mmap_status;
+		return status->ima_mmap_status;
 	case BPRM_CHECK:
-		return iint->ima_bprm_status;
+		return status->ima_bprm_status;
 	case CREDS_CHECK:
-		return iint->ima_creds_status;
+		return status->ima_creds_status;
 	case FILE_CHECK:
 	case POST_SETATTR:
-		return iint->ima_file_status;
+		return status->ima_file_status;
 	case MODULE_CHECK ... MAX_CHECK - 1:
 	default:
-		return iint->ima_read_status;
+		return status->ima_read_status;
 	}
 }
 
-static void ima_set_cache_status(struct integrity_iint_cache *iint,
-				 enum ima_hooks func,
-				 enum integrity_status status)
+static void ima_set_cache_status(enum ima_hooks func,
+				 enum integrity_status status,
+				 struct ns_status *ns_status)
 {
 	switch (func) {
 	case MMAP_CHECK:
-		iint->ima_mmap_status = status;
+		ns_status->ima_mmap_status = status;
 		break;
 	case BPRM_CHECK:
-		iint->ima_bprm_status = status;
+		ns_status->ima_bprm_status = status;
 		break;
 	case CREDS_CHECK:
-		iint->ima_creds_status = status;
+		ns_status->ima_creds_status = status;
 	case FILE_CHECK:
 	case POST_SETATTR:
-		iint->ima_file_status = status;
+		ns_status->ima_file_status = status;
 		break;
 	case MODULE_CHECK ... MAX_CHECK - 1:
 	default:
-		iint->ima_read_status = status;
+		ns_status->ima_read_status = status;
 		break;
 	}
 }
 
 static void ima_cache_flags(struct integrity_iint_cache *iint,
-			     enum ima_hooks func)
+			    enum ima_hooks func, struct ns_status *status)
 {
+	unsigned long flags = iint_flags(iint, status);
+
 	switch (func) {
 	case MMAP_CHECK:
-		iint->flags |= (IMA_MMAP_APPRAISED | IMA_APPRAISED);
+		flags |= (IMA_MMAP_APPRAISED | IMA_APPRAISED);
 		break;
 	case BPRM_CHECK:
-		iint->flags |= (IMA_BPRM_APPRAISED | IMA_APPRAISED);
+		flags |= (IMA_BPRM_APPRAISED | IMA_APPRAISED);
 		break;
 	case CREDS_CHECK:
-		iint->flags |= (IMA_CREDS_APPRAISED | IMA_APPRAISED);
+		flags |= (IMA_CREDS_APPRAISED | IMA_APPRAISED);
 		break;
 	case FILE_CHECK:
 	case POST_SETATTR:
-		iint->flags |= (IMA_FILE_APPRAISED | IMA_APPRAISED);
+		flags |= (IMA_FILE_APPRAISED | IMA_APPRAISED);
 		break;
 	case MODULE_CHECK ... MAX_CHECK - 1:
 	default:
-		iint->flags |= (IMA_READ_APPRAISED | IMA_APPRAISED);
+		flags |= (IMA_READ_APPRAISED | IMA_APPRAISED);
 		break;
 	}
+
+	set_iint_flags(iint, status, flags);
 }
 
 enum hash_algo ima_get_hash_algo(struct evm_ima_xattr_data *xattr_value,
@@ -206,7 +210,9 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct integrity_iint_cache *iint,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
-			     int xattr_len)
+			     int xattr_len,
+			     struct ima_namespace *ns,
+			     struct ns_status *ns_status)
 {
 	static const char op[] = "appraise_data";
 	const char *cause = "unknown";
@@ -214,6 +220,7 @@ int ima_appraise_measurement(enum ima_hooks func,
 	struct inode *inode = d_backing_inode(dentry);
 	enum integrity_status status = INTEGRITY_UNKNOWN;
 	int rc = xattr_len, hash_start = 0;
+	unsigned long flags = iint_flags(iint, ns_status);
 
 	if (!(inode->i_opflags & IOP_XATTR))
 		return INTEGRITY_UNKNOWN;
@@ -222,13 +229,13 @@ int ima_appraise_measurement(enum ima_hooks func,
 		if (rc && rc != -ENODATA)
 			goto out;
 
-		cause = iint->flags & IMA_DIGSIG_REQUIRED ?
+		cause = flags & IMA_DIGSIG_REQUIRED ?
 				"IMA-signature-required" : "missing-hash";
 		status = INTEGRITY_NOLABEL;
 		if (file->f_mode & FMODE_CREATED)
 			iint->flags |= IMA_NEW_FILE;
-		if ((iint->flags & IMA_NEW_FILE) &&
-		    (!(iint->flags & IMA_DIGSIG_REQUIRED) ||
+		if ((flags & IMA_NEW_FILE) &&
+		    (!(flags & IMA_DIGSIG_REQUIRED) ||
 		     (inode->i_size == 0)))
 			status = INTEGRITY_PASS;
 		goto out;
@@ -257,7 +264,7 @@ int ima_appraise_measurement(enum ima_hooks func,
 		hash_start = 1;
 		/* fall through */
 	case IMA_XATTR_DIGEST:
-		if (iint->flags & IMA_DIGSIG_REQUIRED) {
+		if (ns_status->flags & IMA_DIGSIG_REQUIRED) {
 			cause = "IMA-signature-required";
 			status = INTEGRITY_FAIL;
 			break;
@@ -282,7 +289,7 @@ int ima_appraise_measurement(enum ima_hooks func,
 		break;
 	case EVM_IMA_XATTR_DIGSIG:
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
-		rc = integrity_digsig_verify(INTEGRITY_KEYRING_IMA,
+		rc = integrity_digsig_verify(ns, INTEGRITY_KEYRING_IMA,
 					     (const char *)xattr_value, rc,
 					     iint->ima_hash->digest,
 					     iint->ima_hash->length);
@@ -310,7 +317,7 @@ out:
 	 */
 	if ((inode->i_sb->s_iflags & SB_I_IMA_UNVERIFIABLE_SIGNATURE) &&
 	    ((inode->i_sb->s_iflags & SB_I_UNTRUSTED_MOUNTER) ||
-	     (iint->flags & IMA_FAIL_UNVERIFIABLE_SIGS))) {
+	     (flags & IMA_FAIL_UNVERIFIABLE_SIGS))) {
 		status = INTEGRITY_FAIL;
 		cause = "unverifiable-signature";
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, filename,
@@ -325,7 +332,7 @@ out:
 		}
 
 		/* Permit new files with file signatures, but without data. */
-		if (inode->i_size == 0 && iint->flags & IMA_NEW_FILE &&
+		if (inode->i_size == 0 && flags & IMA_NEW_FILE &&
 		    xattr_value && xattr_value->type == EVM_IMA_XATTR_DIGSIG) {
 			status = INTEGRITY_PASS;
 		}
@@ -333,10 +340,11 @@ out:
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, filename,
 				    op, cause, rc, 0);
 	} else {
-		ima_cache_flags(iint, func);
+		ima_cache_flags(iint, func, ns_status);
 	}
 
-	ima_set_cache_status(iint, func, status);
+	ima_set_cache_status(func, status, ns_status);
+
 	return status;
 }
 
@@ -353,22 +361,24 @@ void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file)
 	if (test_bit(IMA_DIGSIG, &iint->atomic_flags))
 		return;
 
-	if ((iint->ima_file_status != INTEGRITY_PASS) &&
-	    !(iint->flags & IMA_HASH))
-		return;
-
 	status = ima_get_ns_status(get_current_ns(), file_inode(file), iint);
 	if (IS_ERR(status))
 		return;
 
+	if ((status->ima_file_status != INTEGRITY_PASS) &&
+	    !(iint->flags & IMA_HASH))
+		goto out;
+
 	rc = ima_collect_measurement(iint, status, file, NULL, 0, ima_hash_algo);
-	ns_status_put(status);
 	if (rc < 0)
-		return;
+		goto out;
 
 	inode_lock(file_inode(file));
 	ima_fix_xattr(dentry, iint);
 	inode_unlock(file_inode(file));
+
+out:
+	ns_status_put(status);
 }
 
 /**
@@ -386,7 +396,7 @@ void ima_inode_post_setattr(struct dentry *dentry)
 	struct integrity_iint_cache *iint;
 	int action;
 
-	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	if (!(get_current_ns()->ima_policy_flag & IMA_APPRAISE) ||
 	    !S_ISREG(inode->i_mode) ||
 	    !(inode->i_opflags & IOP_XATTR))
 		return;
@@ -432,7 +442,7 @@ static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 	struct integrity_iint_cache *iint;
 	struct ns_status *status;
 
-	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	if (!(get_current_ns()->ima_policy_flag & IMA_APPRAISE) ||
 	    !S_ISREG(inode->i_mode))
 		return;
 

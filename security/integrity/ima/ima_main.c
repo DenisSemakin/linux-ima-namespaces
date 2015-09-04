@@ -165,7 +165,7 @@ void ima_file_free(struct file *file)
 	else
 		ns = get_current_ns();
 
-	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!ns || !ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);
@@ -294,7 +294,7 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 	/* Nothing to do, just return existing appraised status */
 	if (!action) {
 		if (must_appraise)
-			rc = ima_get_cache_status(iint, func);
+			rc = ima_get_cache_status(status, func);
 		goto out_locked;
 	}
 
@@ -320,7 +320,8 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 	if (rc == 0 && (action & IMA_APPRAISE_SUBMASK)) {
 		inode_lock(inode);
 		rc = ima_appraise_measurement(func, iint, file, pathname,
-					      xattr_value, xattr_len);
+					      xattr_value, xattr_len,
+					      ns, status);
 		inode_unlock(inode);
 	}
 	if (action & IMA_AUDIT)
