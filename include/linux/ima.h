@@ -117,6 +117,9 @@ static inline int ima_inode_removexattr(struct dentry *dentry,
 #define IMA_HASH_BITS 9
 #endif
 #define IMA_MEASURE_HTABLE_SIZE (1 << IMA_HASH_BITS)
+#define IMA_KEYRING_NAME_SIZE	5	/* _ima */
+#define EVM_KEYRING_NAME_SIZE	5	/* _evm */
+#define INTEGRITY_KEYRING_MAX	3
 
 struct ima_h_table {
 	/* Number of stored measurements in the list */
@@ -171,6 +174,10 @@ struct ima_namespace {
 	int ima_policy_flag;
 	struct list_head iint_list;
 	int valid_policy;
+
+	unsigned char ima_keyring[IMA_KEYRING_NAME_SIZE];
+	unsigned char evm_keyring[EVM_KEYRING_NAME_SIZE];
+	struct key *keyring[INTEGRITY_KEYRING_MAX];
 };
 
 struct tpm_provider {

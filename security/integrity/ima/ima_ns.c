@@ -110,6 +110,11 @@ struct ima_namespace *copy_ima_ns(bool copy,
 
 static void destroy_ima_ns(struct ima_namespace *ns)
 {
+	unsigned i;
+
+	for (i = 0; i < ARRAY_SIZE(ns->keyring); i++)
+		key_put(ns->keyring[i]);
+
 	if (ns->tpm_chip)
 		ns->tpm_provider->release_chip(ns->tpm_chip);
 	put_ima_ns(ns->parent);

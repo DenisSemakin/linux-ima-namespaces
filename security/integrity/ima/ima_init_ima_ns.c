@@ -55,6 +55,13 @@ int ima_init_namespace(struct ima_namespace *ns)
 
 	ns->valid_policy = 1;
 
+	if (ns != &init_ima_ns) {
+		strncpy(ns->ima_keyring, "_ima", sizeof(ns->ima_keyring));
+		strncpy(ns->evm_keyring, "_evm", sizeof(ns->evm_keyring));
+	}
+	for (i = 0; i < ARRAY_SIZE(ns->keyring); i++)
+		ns->keyring[i] = NULL;
+
 	return ret;
 }
 
@@ -75,5 +82,12 @@ struct ima_namespace init_ima_ns = {
 	.ucounts = NULL,
 	.parent = NULL,
 	.ima_measurements = LIST_HEAD_INIT(init_ima_ns.ima_measurements),
+#ifndef CONFIG_IMA_TRUSTED_KEYRING
+	.ima_keyring = "_ima",
+	.evm_keyring = "_evm",
+#else
+	.ima_keyring = ".ima",
+	.evm_keyring = ".evm",
+#endif
 };
 EXPORT_SYMBOL(init_ima_ns);
