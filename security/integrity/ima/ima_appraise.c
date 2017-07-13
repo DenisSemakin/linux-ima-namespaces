@@ -406,10 +406,17 @@ void ima_inode_post_setattr(struct dentry *dentry)
 static int ima_protect_xattr(struct dentry *dentry, const char *xattr_name,
 			     const void *xattr_value, size_t xattr_value_len)
 {
-	if (strcmp(xattr_name, XATTR_NAME_IMA) == 0) {
-		if (!capable(CAP_SYS_ADMIN))
-			return -EPERM;
-		return 1;
+	if (strncmp(xattr_name, XATTR_NAME_IMA,
+		    sizeof(XATTR_NAME_IMA) - 1) == 0) {
+		struct inode *inode = d_backing_inode(dentry);
+		if (inode &&
+		    capable_wrt_inode_uidgid(inode, CAP_INTEGRITY_ADMIN))
+			return 1;
+
+		if (capable(CAP_SYS_ADMIN))
+			return 1;
+
+		return -EPERM;
 	}
 	return 0;
 }

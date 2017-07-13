@@ -366,8 +366,11 @@ struct vfs_ns_cap_data {
 
 #define CAP_AUDIT_READ		37
 
+/* Allow writing of security.ima */
 
-#define CAP_LAST_CAP         CAP_AUDIT_READ
+#define CAP_INTEGRITY_ADMIN	38
+
+#define CAP_LAST_CAP         CAP_INTEGRITY_ADMIN
 
 #define cap_valid(x) ((x) >= 0 && (x) <= CAP_LAST_CAP)
 

@@ -933,6 +933,20 @@ int cap_inode_setxattr(struct dentry *dentry, const char *name,
 	if (strcmp(name, XATTR_NAME_CAPS) == 0)
 		return 0;
 
+	/*
+	 * For security.ima we need either CAP_INTEGRITY_ADMIN
+	 * or CAP_SYS_ADMIN
+	 */
+	if (strcmp(name, XATTR_NAME_IMA) == 0) {
+		struct inode *inode = d_backing_inode(dentry);
+
+		if ((!inode ||
+		     !capable_wrt_inode_uidgid(inode,
+					       CAP_INTEGRITY_ADMIN)) &&
+		    !ns_capable(user_ns, CAP_SYS_ADMIN))
+			return -EPERM;
+	}
+
 	if (!ns_capable(user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
 	return 0;
@@ -968,8 +982,19 @@ int cap_inode_removexattr(struct dentry *dentry, const char *name)
 		return 0;
 	}
 
+	if (strcmp(name, XATTR_NAME_IMA) == 0) {
+		struct inode *inode = d_backing_inode(dentry);
+
+		if ((!inode ||
+		     !capable_wrt_inode_uidgid(inode,
+					       CAP_INTEGRITY_ADMIN)) &&
+		    !ns_capable(user_ns, CAP_SYS_ADMIN))
+			return -EPERM;
+	}
+
 	if (!ns_capable(user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
+
 	return 0;
 }
 
