@@ -13,17 +13,28 @@
 #include <linux/user_namespace.h>
 #include <linux/proc_ns.h>
 #include <linux/ima.h>
+#include <linux/slab.h>
 
 #include "ima.h"
 
 int ima_init_namespace(struct ima_namespace *ns)
 {
+	int ret = 0;
+
+	ns->ns_status_tree = RB_ROOT;
+	rwlock_init(&ns->ns_status_lock);
+	ns->ns_status_cache = KMEM_CACHE(ns_status, SLAB_PANIC);
+	if (!ns->ns_status_cache)
+		return -ENOMEM;
+
 #ifdef CONFIG_IMA_NS
 	ns->ns.ops = &imans_operations;
-	return ns_alloc_inum(&ns->ns);
-#else
-	return 0;
+	ret = ns_alloc_inum(&ns->ns);
+	if (ret)
+		kmem_cache_destroy(ns->ns_status_cache);
 #endif
+
+	return ret;
 }
 
 int __init ima_ns_init(void)
