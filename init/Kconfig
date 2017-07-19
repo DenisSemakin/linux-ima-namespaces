@@ -972,6 +972,9 @@ config IMA_NS
 	help
 	  Allow the creation of IMA namespaces. Namespaced IMA data
           enables having IMA features work separately in each IMA namespace.
+	  Currently, only the audit status flags are stored in the namespace,
+	  which allows the same file to be audited each time it is accessed
+	  in a new namespace.
 
 endif # NAMESPACES
 
