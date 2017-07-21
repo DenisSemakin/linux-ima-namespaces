@@ -30,6 +30,16 @@ void ima_free_queue_entries(struct ima_namespace *ns)
 {
 	struct ima_queue_entry *current_qe;
 	struct ima_queue_entry *next_qe;
+	struct hlist_node *node;
+	int i;
+
+	/* Delete entries from htable*/
+	for (i = 0; i < IMA_MEASURE_HTABLE_SIZE; i++) {
+		hlist_for_each_entry_safe(current_qe, node,
+					  &ns->ima_htable.queue[i], hnext) {
+			hlist_del(&current_qe->hnext);
+		}
+	}
 
 	/* No more extensions to the list, so no lock */
 	list_for_each_entry_safe(current_qe, next_qe,
@@ -159,7 +169,7 @@ void ima_add_violation(struct file *file, const unsigned char *filename,
 	int result;
 
 	/* can overflow, only indicator */
-	atomic_long_inc(&ima_htable.violations);
+	atomic_long_inc(&ns->ima_htable.violations);
 
 	result = ima_alloc_init_template(&event_data, &entry);
 	if (result < 0) {

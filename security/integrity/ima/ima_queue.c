@@ -35,13 +35,6 @@ static unsigned long binary_runtime_size;
 static unsigned long binary_runtime_size = ULONG_MAX;
 #endif
 
-/* key: inode (before secure-hashing a file) */
-struct ima_h_table ima_htable = {
-	.len = ATOMIC_LONG_INIT(0),
-	.violations = ATOMIC_LONG_INIT(0),
-	.queue[0 ... IMA_MEASURE_HTABLE_SIZE - 1] = HLIST_HEAD_INIT
-};
-
 /* mutex protects atomicity of extending measurement list
  * and extending the TPM PCR aggregate. Since tpm_extend can take
  * long (and the tpm driver uses a mutex), we can't use the spinlock.
@@ -50,7 +43,8 @@ static DEFINE_MUTEX(ima_extend_list_mutex);
 
 /* lookup up the digest value in the hash table, and return the entry */
 static struct ima_queue_entry *ima_lookup_digest_entry(u8 *digest_value,
-						       int pcr)
+						       int pcr,
+						       struct ima_namespace *ns)
 {
 	struct ima_queue_entry *qe, *ret = NULL;
 	unsigned int key;
@@ -58,7 +52,7 @@ static struct ima_queue_entry *ima_lookup_digest_entry(u8 *digest_value,
 
 	key = ima_hash_key(digest_value);
 	rcu_read_lock();
-	hlist_for_each_entry_rcu(qe, &ima_htable.queue[key], hnext) {
+	hlist_for_each_entry_rcu(qe, &ns->ima_htable.queue[key], hnext) {
 		rc = memcmp(qe->entry->digest, digest_value, TPM_DIGEST_SIZE);
 		if ((rc == 0) && (qe->entry->pcr == pcr)) {
 			ret = qe;
@@ -110,10 +104,10 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 	INIT_LIST_HEAD(&qe->later);
 	list_add_tail_rcu(&qe->later, get_measurements());
 
-	atomic_long_inc(&ima_htable.len);
-	if (update_htable && ns == &init_ima_ns) {
+	atomic_long_inc(&ns->ima_htable.len);
+	if (update_htable) {
 		key = ima_hash_key(entry->digest);
-		hlist_add_head_rcu(&qe->hnext, &ima_htable.queue[key]);
+		hlist_add_head_rcu(&qe->hnext, &ns->ima_htable.queue[key]);
 	}
 
 	if (binary_runtime_size != ULONG_MAX) {
@@ -175,7 +169,7 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 	mutex_lock(&ima_extend_list_mutex);
 	if (!violation) {
 		memcpy(digest, entry->digest, sizeof(digest));
-		if (ima_lookup_digest_entry(digest, entry->pcr)) {
+		if (ima_lookup_digest_entry(digest, entry->pcr, ns)) {
 			audit_cause = "hash_exists";
 			result = -EEXIST;
 			goto out;

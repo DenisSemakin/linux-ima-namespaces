@@ -104,7 +104,6 @@ struct ima_queue_entry {
 	struct list_head later;		/* place in ima_measurements list */
 	struct ima_template_entry *entry;
 };
-extern struct list_head ima_measurements;	/* list of all measurements */
 
 /* Some details preceding the binary serialized measurement list */
 struct ima_kexec_hdr {
@@ -192,13 +191,6 @@ void ima_init_template_list(void);
  * used to protect h_table and sha_table
  */
 extern spinlock_t ima_queue_lock;
-
-struct ima_h_table {
-	atomic_long_t len;	/* number of stored measurements in the list */
-	atomic_long_t violations;
-	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
-};
-extern struct ima_h_table ima_htable;
 
 static inline unsigned long ima_hash_key(u8 *digest)
 {

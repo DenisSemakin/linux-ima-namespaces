@@ -15,6 +15,7 @@
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
 #include <linux/kexec.h>
+#include <linux/ima.h>
 #include "ima.h"
 
 #ifdef CONFIG_IMA_KEXEC
@@ -145,13 +146,14 @@ void ima_load_kexec_buffer(void)
 {
 	void *kexec_buffer = NULL;
 	size_t kexec_buffer_size = 0;
+	struct ima_namespace *ns = get_current_ns();
 	int rc;
 
 	rc = ima_get_kexec_buffer(&kexec_buffer, &kexec_buffer_size);
 	switch (rc) {
 	case 0:
 		rc = ima_restore_measurement_list(kexec_buffer_size,
-						  kexec_buffer);
+						  kexec_buffer, ns);
 		if (rc != 0)
 			pr_err("Failed to restore the measurement list: %d\n",
 				rc);

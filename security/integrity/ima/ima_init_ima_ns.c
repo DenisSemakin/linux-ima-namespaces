@@ -20,6 +20,7 @@
 int ima_init_namespace(struct ima_namespace *ns)
 {
 	int ret = 0;
+	size_t i;
 
 	ns->ns_status_tree = RB_ROOT;
 	rwlock_init(&ns->ns_status_lock);
@@ -38,6 +39,11 @@ int ima_init_namespace(struct ima_namespace *ns)
 		ns->tpm_chip = NULL;
 
 	INIT_LIST_HEAD(&ns->ima_measurements);
+	atomic_long_set(&ns->ima_htable.len, 0);
+	atomic_long_set(&ns->ima_htable.violations, 0);
+
+	for (i = 0; i < IMA_MEASURE_HTABLE_SIZE; i++)
+		INIT_HLIST_HEAD(&ns->ima_htable.queue[i]);
 
 	return ret;
 }
