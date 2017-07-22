@@ -47,7 +47,6 @@ static int __init default_canonical_fmt_setup(char *str)
 }
 __setup("ima_canonical_fmt", default_canonical_fmt_setup);
 
-static int valid_policy = 1;
 #define TMPBUFLEN 12
 static ssize_t ima_show_htable_value(char __user *buf, size_t count,
 				     loff_t *ppos, atomic_long_t *val)
@@ -289,7 +288,7 @@ static const struct file_operations ima_ascii_measurements_ops = {
 	.release = seq_release,
 };
 
-static ssize_t ima_read_policy(char *path)
+static ssize_t ima_read_policy(char *path, struct ima_namespace *ns)
 {
 	void *data;
 	char *datap;
@@ -311,7 +310,7 @@ static ssize_t ima_read_policy(char *path)
 	datap = data;
 	while (size > 0 && (p = strsep(&datap, "\n"))) {
 		pr_debug("rule: %s\n", p);
-		rc = ima_parse_add_rule(p);
+		rc = ima_parse_add_rule(p, ns);
 		if (rc < 0)
 			break;
 		size -= rc;
@@ -333,9 +332,6 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 	ssize_t result;
 	struct ima_namespace *ns = file->private_data;
 
-	if (ns != &init_ima_ns)
-		return datalen;
-
 	if (datalen >= PAGE_SIZE)
 		datalen = PAGE_SIZE - 1;
 
@@ -355,7 +351,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		goto out_free;
 
 	if (data[0] == '/') {
-		result = ima_read_policy(data);
+		result = ima_read_policy(data, ns);
 	} else if (ima_appraise & IMA_APPRAISE_POLICY) {
 		pr_err("signed policy file (specified as an absolute pathname) required\n");
 		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
@@ -364,14 +360,14 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		if (ima_appraise & IMA_APPRAISE_ENFORCE)
 			result = -EACCES;
 	} else {
-		result = ima_parse_add_rule(data);
+		result = ima_parse_add_rule(data, ns);
 	}
 	mutex_unlock(&ima_write_mutex);
 out_free:
 	kfree(data);
 out:
 	if (result < 0)
-		valid_policy = 0;
+		ns->valid_policy = 0;
 
 	return result;
 }
@@ -405,13 +401,13 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 #else
 		if ((filp->f_flags & O_ACCMODE) != O_RDONLY)
 			return -EACCES;
-		if (!capable(CAP_SYS_ADMIN))
+		if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
 			return -EPERM;
 		return seq_open(filp, &ima_policy_seqops);
 #endif
 	}
 
-	filp->private_data = inode->i_private;
+	filp->private_data = ns;
 
 	if (test_and_set_bit(IMA_FS_BUSY, &ns->sfs.ima_fs_flags))
 		return -EBUSY;
@@ -427,29 +423,29 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
  */
 static int ima_release_policy(struct inode *inode, struct file *file)
 {
-	const char *cause = valid_policy ? "completed" : "failed";
 	struct ima_namespace *ns = inode->i_private;
+	const char *cause = ns->valid_policy ? "completed" : "failed";
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 		return seq_release(inode, file);
 
-	if (valid_policy && ima_check_policy() < 0) {
+	if (ns->valid_policy && ima_check_policy(ns) < 0) {
 		cause = "failed";
-		valid_policy = 0;
+		ns->valid_policy = 0;
 	}
 
 	pr_info("policy update %s\n", cause);
 	integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
-			    "policy_update", cause, !valid_policy, 0);
+			    "policy_update", cause, !ns->valid_policy, 0);
 
-	if (!valid_policy) {
-		ima_delete_rules();
-		valid_policy = 1;
+	if (!ns->valid_policy) {
+		ima_delete_rules(&ns->ima_temp_rules);
+		ns->valid_policy = 1;
 		clear_bit(IMA_FS_BUSY, &ns->sfs.ima_fs_flags);
 		return 0;
 	}
 
-	ima_update_policy();
+	ima_update_policy(ns);
 #if !defined(CONFIG_IMA_WRITE_POLICY) && !defined(CONFIG_IMA_READ_POLICY)
 	securityfs_remove(ns->sfs.dentry[IMAFS_DENTRY_IMA_POLICY]);
 	ns->sfs.dentry[IMAFS_DENTRY_IMA_POLICY] = NULL;

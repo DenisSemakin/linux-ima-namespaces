@@ -6,6 +6,7 @@
  * Serge Hallyn <serue@us.ibm.com>
  * Kylene Hall <kylene@us.ibm.com>
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -162,8 +163,15 @@ void ima_file_free(struct file *file)
 {
 	struct inode *inode = file_inode(file);
 	struct integrity_iint_cache *iint;
+	struct ima_namespace *ns;
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	/* current->nsproxy may be null, why?? kernel thread? */
+	if (!current->nsproxy)
+		ns = &init_ima_ns;
+	else
+		ns = get_current_ns();
+
+	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);
@@ -194,7 +202,7 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 	enum hash_algo hash_algo;
 	unsigned long flags;
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!policy_ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
 
 	/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
@@ -207,7 +215,7 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 		action &= IMA_AUDIT;
 
 	violation_check = ((func == FILE_CHECK || func == MMAP_CHECK) &&
-			   (ima_policy_flag & IMA_MEASURE));
+			   (policy_ns->ima_policy_flag & IMA_MEASURE));
 	if (!action && !violation_check)
 		return 0;
 
@@ -449,7 +457,8 @@ void ima_post_path_mknod(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int must_appraise;
 
-	must_appraise = ima_must_appraise(inode, MAY_ACCESS, FILE_CHECK);
+	must_appraise = ima_must_appraise(inode, MAY_ACCESS, FILE_CHECK,
+					  current_user_ns());
 	if (!must_appraise)
 		return;
 
@@ -596,7 +605,7 @@ static int __init init_ima(void)
 	}
 
 	if (!error)
-		ima_update_policy_flag();
+		ima_update_policy_flag(&init_ima_ns);
 
 	return error;
 }

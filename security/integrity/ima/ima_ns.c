@@ -14,6 +14,8 @@
 #include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/ima.h>
+#include <linux/rculist.h>
+#include <linux/rcupdate.h>
 
 #include "ima.h"
 

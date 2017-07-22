@@ -213,10 +213,10 @@ int ima_get_action(struct inode *inode, const struct cred *cred, u32 secid,
 {
 	int flags = IMA_MEASURE | IMA_AUDIT | IMA_APPRAISE | IMA_HASH;
 
-	flags &= ima_policy_flag;
+	flags &= policy_ns->ima_policy_flag;
 
 	return ima_match_policy(inode, cred, secid, func, mask, flags, pcr,
-				ns, policy_ns);
+				ns, policy_ns, ns->user_ns);
 }
 
 /*

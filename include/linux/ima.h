@@ -159,14 +159,20 @@ struct ima_namespace {
 		struct dentry *dentry[IMAFS_DENTRY_LAST];
 		bool dentries_mapped;
 	} sfs;
+
+	/* Pointer to ns's current policy */
+	struct list_head *ima_rules;
+	struct list_head ima_temp_rules;
+	/* ns's policy rules */
+	struct list_head ima_policy_rules;
+	/* for policy quick check */
+	int ima_policy_flag;
+	struct list_head iint_list;
+	int valid_policy;
 };
 
 extern struct ima_namespace init_ima_ns;
-
-static inline struct list_head *get_measurements(struct ima_namespace *ns)
-{
-	return &ns->ima_measurements;
-}
+extern struct list_head ima_default_rules;
 
 #ifdef CONFIG_IMA_NS
 

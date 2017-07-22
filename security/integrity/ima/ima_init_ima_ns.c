@@ -45,6 +45,14 @@ int ima_init_namespace(struct ima_namespace *ns)
 	for (i = 0; i < IMA_MEASURE_HTABLE_SIZE; i++)
 		INIT_HLIST_HEAD(&ns->ima_htable.queue[i]);
 
+	INIT_LIST_HEAD(&ns->ima_policy_rules);
+	INIT_LIST_HEAD(&ns->ima_temp_rules);
+	INIT_LIST_HEAD(&ns->iint_list);
+	ns->ima_rules = &ima_default_rules;
+	ima_update_policy_flag(ns);
+
+	ns->valid_policy = 1;
+
 	return ret;
 }
 

@@ -3,6 +3,7 @@
  *
  * Author:
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,7 +49,8 @@ bool is_ima_appraise_enabled(void)
  *
  * Return 1 to appraise or hash
  */
-int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func)
+int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
+		      struct user_namespace *user_ns)
 {
 	u32 secid;
 	struct ima_namespace *ns = get_current_ns();
@@ -58,7 +60,8 @@ int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func)
 
 	security_task_getsecid(current, &secid);
 	return ima_match_policy(inode, current_cred(), secid, func, mask,
-				IMA_APPRAISE | IMA_HASH, NULL, ns, ns);
+				IMA_APPRAISE | IMA_HASH, NULL, ns, ns,
+				user_ns);
 }
 
 static int ima_fix_xattr(struct dentry *dentry,
@@ -387,13 +390,16 @@ void ima_inode_post_setattr(struct dentry *dentry)
 	struct integrity_iint_cache *iint;
 	int action;
 
-	if (!(ima_policy_flag & IMA_APPRAISE) || !S_ISREG(inode->i_mode)
-	    || !(inode->i_opflags & IOP_XATTR))
+	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	    !S_ISREG(inode->i_mode) ||
+	    !(inode->i_opflags & IOP_XATTR))
 		return;
 
-	action = ima_must_appraise(inode, MAY_ACCESS, POST_SETATTR);
+	action = ima_must_appraise(inode, MAY_ACCESS, POST_SETATTR,
+				   current_user_ns());
 	if (!action)
 		__vfs_removexattr(dentry, XATTR_NAME_IMA);
+
 	iint = integrity_iint_find(inode);
 	if (iint) {
 		set_bit(IMA_CHANGE_ATTR, &iint->atomic_flags);
@@ -423,7 +429,8 @@ static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 	struct integrity_iint_cache *iint;
 	struct ns_status *status;
 
-	if (!(ima_policy_flag & IMA_APPRAISE) || !S_ISREG(inode->i_mode))
+	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	    !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);

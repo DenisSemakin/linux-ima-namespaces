@@ -50,9 +50,6 @@ enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8 };
 #define IMA_TEMPLATE_IMA_NAME "ima"
 #define IMA_TEMPLATE_IMA_FMT "d|n"
 
-/* current content of the policy */
-extern int ima_policy_flag;
-
 /* set during initialization */
 extern int ima_hash_algo;
 extern int ima_appraise;
@@ -247,17 +244,44 @@ const char *ima_d_path(const struct path *path, char **pathbuf, char *filename);
 /* IMA policy related functions */
 int ima_match_policy(struct inode *inode, const struct cred *cred, u32 secid,
 		     enum ima_hooks func, int mask, int flags, int *pcr,
-		     struct ima_namespace *ns, struct ima_namespace *policy_ns);
+		     struct ima_namespace *ns, struct ima_namespace *policy_ns,
+		     struct user_namespace *user_ns);
 void ima_init_policy(void);
-void ima_update_policy(void);
-void ima_update_policy_flag(void);
-ssize_t ima_parse_add_rule(char *);
-void ima_delete_rules(void);
-int ima_check_policy(void);
+void ima_update_policy(struct ima_namespace *ns);
+void ima_update_policy_flag(struct ima_namespace *ns);
+ssize_t ima_parse_add_rule(char *rule, struct ima_namespace *ns);
+void ima_delete_rules(struct list_head *ima_policy_rules);
+int ima_check_policy(struct ima_namespace *ns);
 void *ima_policy_start(struct seq_file *m, loff_t *pos);
 void *ima_policy_next(struct seq_file *m, void *v, loff_t *pos);
 void ima_policy_stop(struct seq_file *m, void *v);
 int ima_policy_show(struct seq_file *m, void *v);
+
+static inline struct list_head *get_measurements(struct ima_namespace *ns)
+{
+	return &ns->ima_measurements;
+}
+
+static inline struct list_head **get_current_ima_rules(void)
+{
+	return &current->nsproxy->ima_ns->ima_rules;
+}
+
+static inline struct list_head **get_ima_rules(struct ima_namespace *ns)
+{
+	return &ns->ima_rules;
+}
+
+static inline struct list_head *get_ima_policy_rules(struct ima_namespace *ns)
+{
+	return &ns->ima_policy_rules;
+}
+
+static inline struct list_head *get_current_ima_policy_rules(void)
+{
+	return &current->nsproxy->ima_ns->ima_policy_rules;
+}
+
 
 /* Appraise integrity measurements */
 #define IMA_APPRAISE_ENFORCE	0x01
@@ -274,7 +298,8 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
 			     int xattr_len);
-int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func);
+int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
+		      struct user_namespace *user_ns);
 void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
 enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
 					   enum ima_hooks func);
@@ -295,7 +320,8 @@ static inline int ima_appraise_measurement(enum ima_hooks func,
 }
 
 static inline int ima_must_appraise(struct inode *inode, int mask,
-				    enum ima_hooks func)
+				    enum ima_hooks func,
+				    struct user_namespace *userns)
 {
 	return 0;
 }
@@ -409,9 +435,9 @@ static inline struct ima_namespace *get_current_ns(void)
 #endif /* CONFIG_IMA_NS */
 
 #ifdef	CONFIG_IMA_READ_POLICY
-#define	POLICY_FILE_FLAGS	(S_IWUSR | S_IRUSR)
+#define	POLICY_FILE_FLAGS	0666 /* rw-rw-rw- */
 #else
-#define	POLICY_FILE_FLAGS	S_IWUSR
+#define	POLICY_FILE_FLAGS	0222 /* -w--w--w- */
 #endif /* CONFIG_IMA_READ_POLICY */
 
 #endif /* __LINUX_IMA_H */
