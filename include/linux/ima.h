@@ -125,6 +125,18 @@ struct ima_h_table {
 	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
 };
 
+enum {
+	IMAFS_DENTRY_DIR = 0,
+	IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS,
+	IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS,
+	IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT,
+	IMAFS_DENTRY_VIOLATIONS,
+	IMAFS_DENTRY_IMA_POLICY,
+	IMAFS_DENTRY_NAMESPACES,
+	IMAFS_DENTRY_UNSHARE,
+	IMAFS_DENTRY_LAST
+};
+
 struct ima_namespace {
 	struct kref kref;
 	struct user_namespace *user_ns;
@@ -140,9 +152,20 @@ struct ima_namespace {
 
 	struct list_head ima_measurements;
 	struct ima_h_table ima_htable;
+
+	/* securityfs entries */
+	struct {
+		unsigned long ima_fs_flags;
+		struct dentry *dentry[IMAFS_DENTRY_LAST];
+	} sfs;
 };
 
 extern struct ima_namespace init_ima_ns;
+
+static inline struct list_head *get_measurements(struct ima_namespace *ns)
+{
+	return &ns->ima_measurements;
+}
 
 #ifdef CONFIG_IMA_NS
 
@@ -164,11 +187,6 @@ static inline void put_ima_ns(struct ima_namespace *ns)
 		kref_put(&ns->kref, free_ima_ns);
 }
 
-static inline struct list_head *get_measurements(void)
-{
-	return &current->nsproxy->ima_ns->ima_measurements;
-}
-
 void ima_free_queue_entries(struct ima_namespace *ns);
 
 #else
@@ -187,11 +205,6 @@ static inline struct ima_namespace *get_ima_ns(struct ima_namespace *ns)
 
 static inline void put_ima_ns(struct ima_namespace *ns)
 {
-}
-
-static inline struct list_head *get_measurements(void)
-{
-	return &init_ima_ns.ima_measurements;
 }
 
 #endif /* CONFIG_IMA_NS */

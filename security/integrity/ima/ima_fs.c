@@ -26,6 +26,9 @@
 #include <linux/rcupdate.h>
 #include <linux/parser.h>
 #include <linux/vmalloc.h>
+#include <linux/ima.h>
+#include <linux/mount.h>
+#include <linux/namei.h>
 
 #include "ima.h"
 
@@ -57,13 +60,14 @@ static ssize_t ima_show_htable_violations(struct file *filp,
 					  char __user *buf,
 					  size_t count, loff_t *ppos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = filp->private_data;
 
 	return ima_show_htable_value(buf, count, ppos,
 				     &ns->ima_htable.violations);
 }
 
 static const struct file_operations ima_htable_violations_ops = {
+	.open = simple_open,
 	.read = ima_show_htable_violations,
 	.llseek = generic_file_llseek,
 };
@@ -72,12 +76,13 @@ static ssize_t ima_show_measurements_count(struct file *filp,
 					   char __user *buf,
 					   size_t count, loff_t *ppos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = filp->private_data;
 
 	return ima_show_htable_value(buf, count, ppos, &ns->ima_htable.len);
 }
 
 static const struct file_operations ima_measurements_count_ops = {
+	.open = simple_open,
 	.read = ima_show_measurements_count,
 	.llseek = generic_file_llseek,
 };
@@ -87,10 +92,11 @@ static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 {
 	loff_t l = *pos;
 	struct ima_queue_entry *qe;
+	struct ima_namespace *ns = m->file->f_inode->i_private;
 
 	/* we need a lock since pos could point beyond last element */
 	rcu_read_lock();
-	list_for_each_entry_rcu(qe, get_measurements(), later) {
+	list_for_each_entry_rcu(qe, get_measurements(ns), later) {
 		if (!l--) {
 			rcu_read_unlock();
 			return qe;
@@ -103,6 +109,7 @@ static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 {
 	struct ima_queue_entry *qe = v;
+	struct ima_namespace *ns = m->file->f_inode->i_private;
 
 	/* lock protects when reading beyond last element
 	 * against concurrent list-extension
@@ -112,7 +119,7 @@ static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 	rcu_read_unlock();
 	(*pos)++;
 
-	return (&qe->later == get_measurements()) ? NULL : qe;
+	return (&qe->later == get_measurements(ns)) ? NULL : qe;
 }
 
 static void ima_measurements_stop(struct seq_file *m, void *v)
@@ -321,6 +328,10 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 {
 	char *data;
 	ssize_t result;
+	struct ima_namespace *ns = file->private_data;
+
+	if (ns != &init_ima_ns)
+		return datalen;
 
 	if (datalen >= PAGE_SIZE)
 		datalen = PAGE_SIZE - 1;
@@ -364,20 +375,10 @@ out:
 
 static struct dentry *ima_dir;
 static struct dentry *ima_symlink;
-static struct dentry *binary_runtime_measurements;
-static struct dentry *ascii_runtime_measurements;
-static struct dentry *runtime_measurements_count;
-static struct dentry *violations;
-static struct dentry *ima_policy;
-#ifdef CONFIG_IMA_NS
-static struct dentry *unshare;
-#endif
 
 enum ima_fs_flags {
 	IMA_FS_BUSY,
 };
-
-static unsigned long ima_fs_flags;
 
 #ifdef	CONFIG_IMA_READ_POLICY
 static const struct seq_operations ima_policy_seqops = {
@@ -393,6 +394,8 @@ static const struct seq_operations ima_policy_seqops = {
  */
 static int ima_open_policy(struct inode *inode, struct file *filp)
 {
+	struct ima_namespace *ns = inode->i_private;
+
 	if (!(filp->f_flags & O_WRONLY)) {
 #ifndef	CONFIG_IMA_READ_POLICY
 		return -EACCES;
@@ -404,7 +407,10 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 		return seq_open(filp, &ima_policy_seqops);
 #endif
 	}
-	if (test_and_set_bit(IMA_FS_BUSY, &ima_fs_flags))
+
+	filp->private_data = inode->i_private;
+
+	if (test_and_set_bit(IMA_FS_BUSY, &ns->sfs.ima_fs_flags))
 		return -EBUSY;
 	return 0;
 }
@@ -419,6 +425,7 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 static int ima_release_policy(struct inode *inode, struct file *file)
 {
 	const char *cause = valid_policy ? "completed" : "failed";
+	struct ima_namespace *ns = inode->i_private;
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 		return seq_release(inode, file);
@@ -435,16 +442,16 @@ static int ima_release_policy(struct inode *inode, struct file *file)
 	if (!valid_policy) {
 		ima_delete_rules();
 		valid_policy = 1;
-		clear_bit(IMA_FS_BUSY, &ima_fs_flags);
+		clear_bit(IMA_FS_BUSY, &ns->sfs.ima_fs_flags);
 		return 0;
 	}
 
 	ima_update_policy();
 #if !defined(CONFIG_IMA_WRITE_POLICY) && !defined(CONFIG_IMA_READ_POLICY)
-	securityfs_remove(ima_policy);
-	ima_policy = NULL;
+	securityfs_remove(ns->sfs.dentry[IMAFS_DENTRY_IMA_POLICY]);
+	ns->sfs.dentry[IMAFS_DENTRY_IMA_POLICY] = NULL;
 #elif defined(CONFIG_IMA_WRITE_POLICY)
-	clear_bit(IMA_FS_BUSY, &ima_fs_flags);
+	clear_bit(IMA_FS_BUSY, &ns->sfs.ima_fs_flags);
 #elif defined(CONFIG_IMA_READ_POLICY)
 	inode->i_mode &= ~S_IWUSR;
 #endif
@@ -500,69 +507,159 @@ static const struct file_operations ima_unshare_ops = {
 };
 #endif
 
-int __init ima_fs_init(void)
+static const char * ima_symlink_get_link(struct dentry *dentry,
+					 struct inode *inode,
+					 struct delayed_call *done)
 {
-	ima_dir = securityfs_create_dir("ima", integrity_dir);
-	if (IS_ERR(ima_dir))
-		return -1;
+	struct path path;
+	struct ima_namespace *ns = get_current_ns();
 
-	ima_symlink = securityfs_create_symlink("ima", NULL, "integrity/ima",
-						NULL);
-	if (IS_ERR(ima_symlink))
-		goto out;
+	if (!dentry)
+		return ERR_PTR(-ECHILD);
 
-	binary_runtime_measurements =
+	path.mnt = mntget(securityfs_get_mount());
+	path.dentry = dget(ns->sfs.dentry[IMAFS_DENTRY_DIR]
+	                   ? ns->sfs.dentry[IMAFS_DENTRY_DIR]
+	                   : ima_dir);
+	nd_jump_link(&path);
+
+	return NULL;
+}
+
+static int ima_symlink_readlink(struct dentry *dentry, char __user *buffer,
+				int buflen)
+{
+	return readlink_copy(buffer, buflen, ".ima");
+}
+
+static const struct inode_operations ima_symlink_link_iops = {
+	.readlink = ima_symlink_readlink,
+	.get_link = ima_symlink_get_link,
+};
+
+void ima_ns_fs_free(struct ima_namespace *ns)
+{
+	signed i;
+
+	for (i = IMAFS_DENTRY_LAST - 1; i >= 0; i--) {
+		securityfs_remove(ns->sfs.dentry[i]);
+		ns->sfs.dentry[i] = NULL;
+	}
+}
+
+int ima_ns_fs_init(struct ima_namespace *ns, struct dentry *parent)
+{
+	char name[32];
+	unsigned i;
+	int err;
+	struct dentry *dir;
+	umode_t mode = (ns->user_ns == &init_user_ns)
+			? S_IRUSR | S_IRGRP
+			: S_IROTH;
+
+	if (parent) {
+		snprintf(name, sizeof(name), "ima:[%u]", ns->ns.inum);
+
+		i = IMAFS_DENTRY_DIR;
+		ns->sfs.dentry[i] = securityfs_create_dir(name, parent);
+		if (IS_ERR(ns->sfs.dentry[i])) {
+			err = PTR_ERR(ns->sfs.dentry[i]);
+			goto out;
+		}
+		dir = ns->sfs.dentry[i];
+	} else {
+		dir = ima_dir;
+	}
+
+	i = IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS;
+	ns->sfs.dentry[i] =
 	    securityfs_create_file("binary_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   mode, dir, ns,
 				   &ima_measurements_ops);
-	if (IS_ERR(binary_runtime_measurements))
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
 
-	ascii_runtime_measurements =
+	i = IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS;
+	ns->sfs.dentry[i] =
 	    securityfs_create_file("ascii_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   mode, dir, ns,
 				   &ima_ascii_measurements_ops);
-	if (IS_ERR(ascii_runtime_measurements))
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
 
-	runtime_measurements_count =
+	i = IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT;
+	ns->sfs.dentry[i] =
 	    securityfs_create_file("runtime_measurements_count",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   mode, dir, ns,
 				   &ima_measurements_count_ops);
-	if (IS_ERR(runtime_measurements_count))
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
 
-	violations =
-	    securityfs_create_file("violations", S_IRUSR | S_IRGRP,
-				   ima_dir, NULL, &ima_htable_violations_ops);
-	if (IS_ERR(violations))
+	i = IMAFS_DENTRY_VIOLATIONS;
+	ns->sfs.dentry[i] =
+	    securityfs_create_file("violations", mode,
+				   dir, ns,
+				   &ima_htable_violations_ops);
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
 
-	ima_policy = securityfs_create_file("policy", POLICY_FILE_FLAGS,
-					    ima_dir, NULL,
-					    &ima_measure_policy_ops);
-	if (IS_ERR(ima_policy))
+	i = IMAFS_DENTRY_IMA_POLICY;
+	ns->sfs.dentry[i] =
+	    securityfs_create_file("policy", POLICY_FILE_FLAGS,
+				   dir, ns,
+				   &ima_measure_policy_ops);
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
+
+	i = IMAFS_DENTRY_NAMESPACES;
+	ns->sfs.dentry[i] = securityfs_create_dir("namespaces", dir);
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
+		goto out;
+	}
 
 #ifdef CONFIG_IMA_NS
-	unshare = securityfs_create_file("unshare", 0200,
-					 ima_dir, NULL,
-					 &ima_unshare_ops);
-	if (IS_ERR(unshare))
+	i = IMAFS_DENTRY_UNSHARE;
+	ns->sfs.dentry[i] = securityfs_create_file("unshare", 0200,
+						   dir, ns,
+						   &ima_unshare_ops);
+	if (IS_ERR(ns->sfs.dentry[i])) {
+		err = PTR_ERR(ns->sfs.dentry[i]);
 		goto out;
+	}
 #endif
 
 	return 0;
 out:
-	securityfs_remove(violations);
-	securityfs_remove(runtime_measurements_count);
-	securityfs_remove(ascii_runtime_measurements);
-	securityfs_remove(binary_runtime_measurements);
-	securityfs_remove(ima_symlink);
+	ima_ns_fs_free(ns);
+	return err;
+}
+
+int __init ima_fs_init(void)
+{
+	ima_dir = securityfs_create_file(".ima", S_IFDIR | 0000,
+					 NULL, NULL, NULL);
+	if (IS_ERR(ima_dir))
+		return -1;
+
+	ima_symlink = securityfs_create_symlink("ima", NULL, NULL,
+						&ima_symlink_link_iops);
+	if (IS_ERR(ima_symlink))
+		goto out;
+
+	return 0;
+out:
 	securityfs_remove(ima_dir);
-	securityfs_remove(ima_policy);
-#ifdef CONFIG_IMA_NS
-	securityfs_remove(unshare);
-#endif
+
 	return -1;
 }

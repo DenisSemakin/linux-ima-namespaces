@@ -50,7 +50,13 @@ int ima_init_namespace(struct ima_namespace *ns)
 
 int __init ima_ns_init(void)
 {
-	return ima_init_namespace(&init_ima_ns);
+	int err;
+
+	err = ima_init_namespace(&init_ima_ns);
+	if (err)
+		return err;
+
+	return ima_ns_fs_init(&init_ima_ns, NULL);
 }
 
 struct ima_namespace init_ima_ns = {

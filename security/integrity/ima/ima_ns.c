@@ -17,6 +17,8 @@
 
 #include "ima.h"
 
+static void destroy_ima_ns(struct ima_namespace *ns);
+
 static struct ucounts *inc_ima_namespaces(struct user_namespace *ns)
 {
 	return inc_ucount(ns, current_euid(), UCOUNT_IMA_NAMESPACES);
@@ -61,7 +63,16 @@ static struct ima_namespace *create_ima_ns(struct user_namespace *user_ns,
 	ns->user_ns = get_user_ns(user_ns);
 	ns->ucounts = ucounts;
 
+	memset(&ns->sfs, 0, sizeof(ns->sfs));
+	err = ima_ns_fs_init(ns, old_ns->sfs.dentry[IMAFS_DENTRY_NAMESPACES]);
+	if (err)
+		goto fail_destroy_ima_ns;
+
 	return ns;
+
+fail_destroy_ima_ns:
+	destroy_ima_ns(ns);
+	goto fail;
 
 fail_free:
 	kfree(ns);
@@ -103,6 +114,7 @@ static void destroy_ima_ns(struct ima_namespace *ns)
 	dec_ima_namespaces(ns->ucounts);
 	free_ns_status_cache(ns);
 	ima_free_queue_entries(ns);
+	ima_ns_fs_free(ns);
 	kfree(ns);
 }
 

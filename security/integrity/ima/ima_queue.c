@@ -102,7 +102,7 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 	qe->entry = entry;
 
 	INIT_LIST_HEAD(&qe->later);
-	list_add_tail_rcu(&qe->later, get_measurements());
+	list_add_tail_rcu(&qe->later, get_measurements(ns));
 
 	atomic_long_inc(&ns->ima_htable.len);
 	if (update_htable) {

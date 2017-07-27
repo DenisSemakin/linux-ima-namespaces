@@ -132,9 +132,9 @@ int __init ima_init(void)
 
 	ima_init_policy();
 
-	rc = ima_ns_init();
+	rc = ima_fs_init();
 	if (rc != 0)
 		return rc;
 
-	return ima_fs_init();
+	return ima_ns_init();
 }

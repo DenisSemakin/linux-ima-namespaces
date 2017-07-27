@@ -187,6 +187,9 @@ unsigned long ima_get_binary_runtime_size(void);
 int ima_init_template(void);
 void ima_init_template_list(void);
 
+int ima_ns_fs_init(struct ima_namespace *ns, struct dentry *parent);
+void ima_ns_fs_free(struct ima_namespace *ns);
+
 /*
  * used to protect h_table and sha_table
  */
