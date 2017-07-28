@@ -122,9 +122,13 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 	fmode_t mode = file->f_mode;
 	bool update;
 	struct ns_status *status;
+	bool xattr_update = false;
+	unsigned long flags;
 
 	if (!(mode & FMODE_WRITE))
 		return;
+
+	flags = iint_flags(iint, NULL);
 
 	mutex_lock(&iint->mutex);
 	if (atomic_read(&inode->i_writecount) == 1) {
@@ -132,15 +136,26 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 					    &iint->atomic_flags);
 		if (!IS_I_VERSION(inode) ||
 		    !inode_eq_iversion(inode, iint->version) ||
-		    (iint->flags & IMA_NEW_FILE)) {
-			iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
-
+		    (flags & IMA_NEW_FILE)) {
+			set_iint_flags(iint, NULL,
+				       flags & ~(IMA_DONE_MASK | IMA_NEW_FILE));
+			/* change flags for all ns status linked to this iint */
 			read_lock(&iint->ns_list_lock);
-			list_for_each_entry(status, &iint->ns_list, ns_next)
+
+			list_for_each_entry(status, &iint->ns_list, ns_next) {
+				flags = iint_flags(iint, status);
+				flags = set_iint_flags(iint, status,
+					flags & ~(IMA_DONE_MASK | IMA_NEW_FILE));
 				status->measured_pcrs = 0;
+				if (!xattr_update && flags & IMA_APPRAISE && update)
+					xattr_update = true;
+			}
+
 			read_unlock(&iint->ns_list_lock);
 
-			if (update)
+			/* ima_update_xattr must not be called with the
+			   read lock held */
+			if (xattr_update)
 				ima_update_xattr(iint, file);
 		}
 	}
