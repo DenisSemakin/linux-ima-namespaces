@@ -38,6 +38,7 @@ int ima_init_namespace(struct ima_namespace *ns)
 	if (ns != &init_ima_ns)
 		ns->tpm_chip = NULL;
 	ns->extended_pcr = false;
+	ns->tpm_provider = NULL;
 
 	INIT_LIST_HEAD(&ns->ima_measurements);
 	atomic_long_set(&ns->ima_htable.len, 0);

@@ -72,6 +72,12 @@ static inline void ima_post_path_mknod(struct dentry *dentry)
 	return;
 }
 
+static inline int ima_namespace_set_tpm_chip(struct ima_namespace *ns,
+					     struct tpm_provider *tpm_provider,
+					     struct tpm_chip *chip)
+{
+	return -ENODEV;
+}
 #endif /* CONFIG_IMA */
 
 #ifndef CONFIG_IMA_KEXEC
@@ -150,6 +156,7 @@ struct ima_namespace {
 	struct rw_semaphore tpm_chip_lock;
 	struct tpm_chip *tpm_chip;
 	bool extended_pcr;
+	struct tpm_provider *tpm_provider;
 
 	struct list_head ima_measurements;
 	struct ima_h_table ima_htable;
@@ -170,6 +177,10 @@ struct ima_namespace {
 	int ima_policy_flag;
 	struct list_head iint_list;
 	int valid_policy;
+};
+
+struct tpm_provider {
+	void (*release_chip)(struct tpm_chip *chip);
 };
 
 extern struct ima_namespace init_ima_ns;
@@ -197,6 +208,9 @@ static inline void put_ima_ns(struct ima_namespace *ns)
 
 void ima_free_queue_entries(struct ima_namespace *ns);
 
+int ima_namespace_set_tpm_chip(struct ima_namespace *ns,
+			       struct tpm_provider *tpm_provider,
+			       struct tpm_chip *chip);
 #else
 
 static inline struct ima_namespace *copy_ima_ns(bool copy,

@@ -110,6 +110,8 @@ struct ima_namespace *copy_ima_ns(bool copy,
 
 static void destroy_ima_ns(struct ima_namespace *ns)
 {
+	if (ns->tpm_chip)
+		ns->tpm_provider->release_chip(ns->tpm_chip);
 	put_ima_ns(ns->parent);
 	put_user_ns(ns->user_ns);
 	ns_free_inum(&ns->ns);
@@ -196,3 +198,23 @@ const struct proc_ns_operations imans_operations = {
 	.install = imans_install,
 	.owner = imans_owner,
 };
+
+int ima_namespace_set_tpm_chip(struct ima_namespace *ns,
+			       struct tpm_provider *tpm_provider,
+			       struct tpm_chip *tpm_chip)
+{
+	if (ns->tpm_chip) {
+		printk(KERN_INFO "not setting chip since already have chip (ns=%p)\n", ns);
+		return -EBUSY;
+	}
+	if (ns->extended_pcr) {
+		printk(KERN_INFO "not setting chip since already tried to extend a PCR (ns=%p)\n", ns);
+		return -EINVAL;
+	}
+
+	ns->tpm_provider = tpm_provider;
+	ns->tpm_chip = tpm_chip;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ima_namespace_set_tpm_chip);
