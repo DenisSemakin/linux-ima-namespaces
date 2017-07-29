@@ -37,6 +37,7 @@ int ima_init_namespace(struct ima_namespace *ns)
 	init_rwsem(&ns->tpm_chip_lock);
 	if (ns != &init_ima_ns)
 		ns->tpm_chip = NULL;
+	ns->extended_pcr = false;
 
 	INIT_LIST_HEAD(&ns->ima_measurements);
 	atomic_long_set(&ns->ima_htable.len, 0);

@@ -149,6 +149,7 @@ struct ima_namespace {
 
 	struct rw_semaphore tpm_chip_lock;
 	struct tpm_chip *tpm_chip;
+	bool extended_pcr;
 
 	struct list_head ima_measurements;
 	struct ima_h_table ima_htable;

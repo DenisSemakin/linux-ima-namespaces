@@ -141,6 +141,8 @@ static int ima_pcr_extend(const u8 *hash, int pcr)
 	if (!ns->tpm_chip)
 		return result;
 
+	ns->extended_pcr = true;
+
 	result = tpm_pcr_extend(ns->tpm_chip, pcr, hash);
 	if (result != 0)
 		pr_err("Error Communicating to TPM chip, result: %d\n", result);
