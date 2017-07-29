@@ -229,5 +229,11 @@ static inline void put_ima_ns(struct ima_namespace *ns)
 {
 }
 
+static inline int ima_namespace_set_tpm_chip(struct ima_namespace *ns,
+					     struct tpm_provider *tpm_provider,
+					     struct tpm_chip *chip)
+{
+	return -ENODEV;
+}
 #endif /* CONFIG_IMA_NS */
 #endif /* _LINUX_IMA_H */

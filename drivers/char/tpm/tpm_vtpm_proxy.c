@@ -25,6 +25,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/poll.h>
 #include <linux/compat.h>
+#include <linux/ima.h>
 
 #include "tpm.h"
 
@@ -50,6 +51,8 @@ struct proxy_dev {
 	u8 buffer[TPM_BUFSIZE];      /* request/response buffer */
 
 	struct work_struct work;     /* task that retrieves TPM timeouts */
+
+	struct file *file;
 };
 
 /* all supported flags */
@@ -58,10 +61,80 @@ struct proxy_dev {
 static struct workqueue_struct *workqueue;
 
 static void vtpm_proxy_delete_device(struct proxy_dev *proxy_dev);
+static void vtpm_proxy_fops_undo_open(struct proxy_dev *proxy_dev);
+static struct tpm_provider vtpm_tpm_provider;
 
 /*
  * Functions related to 'server side'
  */
+
+/**
+ * Tell IMA to use the tpm_chip for the IMA namespace associated
+ * with the current process.
+ */
+static int vtpm_proxy_set_chip_imans(struct proxy_dev *proxy_dev,
+				     struct file *filp)
+{
+	int rc;
+
+	if (!current->nsproxy->ima_ns || !proxy_dev)
+		return -EINVAL;
+
+	rc = ima_namespace_set_tpm_chip(current->nsproxy->ima_ns,
+					&vtpm_tpm_provider,
+					proxy_dev->chip);
+	if (!rc) {
+		/* lock access to it */
+		proxy_dev->file = filp;
+		get_file(proxy_dev->file);
+	} else {
+		printk(KERN_INFO "Error: Chip registration refused by IMA; ns tried to use TPM already?\n");
+	}
+
+	return rc;
+}
+
+/**
+ * vtpm_proxy_release_chip - kernel subsystem releases chip
+ */
+void vtpm_proxy_release_chip(struct tpm_chip *chip)
+{
+	struct proxy_dev *proxy_dev = dev_get_drvdata(&chip->dev);
+
+	printk(KERN_INFO "Releaseing proxy_dev %p with chip %p\n", proxy_dev, chip);
+
+	if (!proxy_dev)
+		return;
+
+	/* notify 'server side' application with a HUP */
+	vtpm_proxy_fops_undo_open(proxy_dev);
+
+	/*
+	 * release reference we're holding since vtpm_set_chip_imans
+	 */
+	fput(proxy_dev->file);
+}
+
+static long vtpm_proxy_ioctl_transfer_imans(struct file *filp)
+{
+	struct proxy_dev *proxy_dev = filp->private_data;
+
+	return vtpm_proxy_set_chip_imans(proxy_dev, filp);
+}
+
+/**
+ * vtpm_proxy_fops_ioctl - ioctl command on 'server side'
+ */
+static long vtpm_proxy_fops_ioctl(struct file *filp, unsigned int ioctl,
+				  unsigned long arg)
+{
+	switch (ioctl) {
+	case VTPM_PROXY_IOC_TRANSFER_IMA:
+		return vtpm_proxy_ioctl_transfer_imans(filp);
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
 
 /**
  * vtpm_proxy_fops_read - Read TPM commands on 'server side'
@@ -253,6 +326,7 @@ static const struct file_operations vtpm_proxy_fops = {
 	.write = vtpm_proxy_fops_write,
 	.poll = vtpm_proxy_fops_poll,
 	.release = vtpm_proxy_fops_release,
+	.unlocked_ioctl = vtpm_proxy_fops_ioctl,
 };
 
 /*
@@ -710,6 +784,10 @@ static void vtpmx_cleanup(void)
 {
 	misc_deregister(&vtpmx_miscdev);
 }
+
+static struct tpm_provider vtpm_tpm_provider = {
+	.release_chip = vtpm_proxy_release_chip,
+};
 
 static int __init vtpm_module_init(void)
 {
