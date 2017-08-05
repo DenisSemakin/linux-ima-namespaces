@@ -16,6 +16,7 @@
 #include <crypto/sha.h>
 #include <linux/key.h>
 #include <linux/audit.h>
+#include <linux/kref.h>
 
 /* iint action cache flags */
 #define IMA_MEASURE		0x00000001
@@ -115,6 +116,7 @@ struct signature_v2_hdr {
 
 /* integrity data associated with an inode */
 struct integrity_iint_cache {
+	struct kref ref;
 	struct rb_node rb_node;	/* rooted in integrity_iint_tree */
 	struct mutex mutex;	/* protects: version, flags, digest */
 	struct inode *inode;	/* back pointer to inode in question */
@@ -138,6 +140,23 @@ struct integrity_iint_cache *integrity_iint_find(struct inode *inode);
 
 int integrity_kernel_read(struct file *file, loff_t offset,
 			  void *addr, unsigned long count);
+
+int __init integrity_read_file(const char *path, char **data);
+
+void iint_free(struct kref *ref);
+static inline struct integrity_iint_cache *
+iint_get(struct integrity_iint_cache *iint)
+{
+	if (iint)
+		kref_get(&iint->ref);
+	return iint;
+}
+
+static inline void iint_put(struct integrity_iint_cache *iint)
+{
+	if (iint)
+		kref_put(&iint->ref, iint_free);
+}
 
 #define INTEGRITY_KEYRING_EVM		0
 #define INTEGRITY_KEYRING_IMA		1

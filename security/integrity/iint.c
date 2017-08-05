@@ -71,8 +71,10 @@ struct integrity_iint_cache *integrity_iint_find(struct inode *inode)
 	return iint;
 }
 
-static void iint_free(struct integrity_iint_cache *iint)
+void iint_free(struct kref *ref)
 {
+	struct integrity_iint_cache *iint = container_of(ref, typeof(*iint), ref);
+
 	kfree(iint->ima_hash);
 	iint->ima_hash = NULL;
 	iint->version = 0;
@@ -108,6 +110,8 @@ struct integrity_iint_cache *integrity_inode_get(struct inode *inode)
 	iint = kmem_cache_alloc(iint_cache, GFP_NOFS);
 	if (!iint)
 		return NULL;
+
+	kref_init(&iint->ref);
 
 	write_lock(&integrity_iint_lock);
 
@@ -150,7 +154,7 @@ void integrity_inode_free(struct inode *inode)
 	rb_erase(&iint->rb_node, &integrity_iint_tree);
 	write_unlock(&integrity_iint_lock);
 
-	iint_free(iint);
+	iint_put(iint);
 }
 
 static void init_once(void *foo)
