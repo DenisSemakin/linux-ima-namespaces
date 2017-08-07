@@ -308,7 +308,9 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct ns_status *ns_status);
 int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
 		      struct user_namespace *user_ns);
-void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
+void ima_update_xattr(struct integrity_iint_cache *iint,
+		      struct ns_status *status,
+		      struct file *file);
 enum integrity_status ima_get_cache_status(struct ns_status *status,
 					   enum ima_hooks func);
 enum hash_algo ima_get_hash_algo(struct evm_ima_xattr_data *xattr_value,
@@ -337,6 +339,7 @@ static inline int ima_must_appraise(struct inode *inode, int mask,
 }
 
 static inline void ima_update_xattr(struct integrity_iint_cache *iint,
+				    struct ns_status *status,
 				    struct file *file)
 {
 }
@@ -362,11 +365,14 @@ static inline int ima_read_xattr(struct dentry *dentry,
 
 #endif /* CONFIG_IMA_APPRAISE */
 
-#define IMA_NS_STATUS_ACTIONS   (IMA_AUDIT | IMA_MEASURE | IMA_APPRAISE)
+#define IMA_NS_STATUS_ACTIONS   (IMA_AUDIT | IMA_MEASURE | IMA_APPRAISE | \
+				 IMA_APPRAISE_SUBMASK | IMA_DIGSIG_REQUIRED | \
+				 IMA_PERMIT_DIRECTIO | IMA_HASH)
 #define IMA_NS_STATUS_FLAGS     (IMA_AUDITED | IMA_MEASURED | IMA_APPRAISED | \
 				 IMA_MMAP_APPRAISED | IMA_BPRM_APPRAISED | \
 				 IMA_FILE_APPRAISED | IMA_READ_APPRAISED | \
-				 IMA_CREDS_APPRAISED)
+				 IMA_CREDS_APPRAISED | IMA_DIGSIG_REQUIRED | \
+				 IMA_PERMIT_DIRECTIO | IMA_HASHED)
 
 int ima_ns_init(void);
 struct ima_namespace;

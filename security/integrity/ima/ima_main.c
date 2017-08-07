@@ -122,7 +122,7 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 	fmode_t mode = file->f_mode;
 	bool update;
 	struct ns_status *status;
-	bool xattr_update = false;
+	struct ns_status *update_status = NULL;
 	unsigned long flags;
 
 	if (!(mode & FMODE_WRITE))
@@ -147,16 +147,18 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 				flags = set_iint_flags(iint, status,
 					flags & ~(IMA_DONE_MASK | IMA_NEW_FILE));
 				status->measured_pcrs = 0;
-				if (!xattr_update && flags & IMA_APPRAISE && update)
-					xattr_update = true;
+				if (!update_status && flags & IMA_APPRAISE && update)
+					update_status = ns_status_get(status);
 			}
 
 			read_unlock(&iint->ns_list_lock);
 
 			/* ima_update_xattr must not be called with the
 			   read lock held */
-			if (xattr_update)
-				ima_update_xattr(iint, file);
+			if (update_status) {
+				ima_update_xattr(iint, update_status, file);
+				ns_status_put(update_status);
+			}
 		}
 	}
 	mutex_unlock(&iint->mutex);
@@ -301,7 +303,7 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 		if ((xattr_value && xattr_len > 2) &&
 		    (xattr_value->type == EVM_IMA_XATTR_DIGSIG))
 			set_bit(IMA_DIGSIG, &iint->atomic_flags);
-		iint->flags |= IMA_HASHED;
+		flags = set_iint_flags(iint, status, flags | IMA_HASHED);
 		action ^= IMA_HASH;
 		set_bit(IMA_UPDATE_XATTR, &iint->atomic_flags);
 	}
@@ -342,11 +344,11 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 	if (action & IMA_AUDIT)
 		ima_audit_measurement(iint, pathname, status);
 
-	if ((file->f_flags & O_DIRECT) && (iint->flags & IMA_PERMIT_DIRECTIO))
+	if ((file->f_flags & O_DIRECT) && (flags & IMA_PERMIT_DIRECTIO))
 		rc = 0;
 out_locked:
 	if ((mask & MAY_WRITE) && test_bit(IMA_DIGSIG, &iint->atomic_flags) &&
-	     !(iint->flags & IMA_NEW_FILE))
+	     !(flags & IMA_NEW_FILE))
 		rc = -EACCES;
 	mutex_unlock(&iint->mutex);
 	kfree(xattr_value);

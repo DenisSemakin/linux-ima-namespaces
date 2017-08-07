@@ -351,34 +351,27 @@ out:
 /*
  * ima_update_xattr - update 'security.ima' hash value
  */
-void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file)
+void ima_update_xattr(struct integrity_iint_cache *iint,
+		      struct ns_status *status, struct file *file)
 {
 	struct dentry *dentry = file_dentry(file);
 	int rc = 0;
-	struct ns_status *status = NULL;
 
 	/* do not collect and update hash for digital signatures */
 	if (test_bit(IMA_DIGSIG, &iint->atomic_flags))
 		return;
 
-	status = ima_get_ns_status(get_current_ns(), file_inode(file), iint);
-	if (IS_ERR(status))
-		return;
-
 	if ((status->ima_file_status != INTEGRITY_PASS) &&
-	    !(iint->flags & IMA_HASH))
-		goto out;
+	    !(iint_flags(iint, status) & IMA_HASH))
+		return;
 
 	rc = ima_collect_measurement(iint, status, file, NULL, 0, ima_hash_algo);
 	if (rc < 0)
-		goto out;
+		return;
 
 	inode_lock(file_inode(file));
 	ima_fix_xattr(dentry, iint);
 	inode_unlock(file_inode(file));
-
-out:
-	ns_status_put(status);
 }
 
 /**
