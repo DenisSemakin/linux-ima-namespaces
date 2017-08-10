@@ -225,6 +225,9 @@ int ima_appraise_measurement(enum ima_hooks func,
 	if (!(inode->i_opflags & IOP_XATTR))
 		return INTEGRITY_UNKNOWN;
 
+	if (flags & IMA_APPRAISED)
+		return INTEGRITY_PASS;
+
 	if (rc <= 0) {
 		if (rc && rc != -ENODATA)
 			goto out;
@@ -341,6 +344,7 @@ out:
 				    op, cause, rc, 0);
 	} else {
 		ima_cache_flags(iint, func, ns_status);
+		flags = set_iint_flags(iint, ns_status, flags | IMA_APPRAISED);
 	}
 
 	ima_set_cache_status(func, status, ns_status);
