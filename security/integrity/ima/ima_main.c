@@ -474,7 +474,7 @@ void ima_post_path_mknod(struct dentry *dentry)
 
 	iint = integrity_inode_get(inode);
 	if (iint)
-		iint->flags |= IMA_NEW_FILE;
+		set_iint_flags(iint, NULL, iint_flags(iint, NULL) | IMA_NEW_FILE);
 }
 
 /**
