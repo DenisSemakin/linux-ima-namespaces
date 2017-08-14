@@ -347,6 +347,7 @@ void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file)
 {
 	struct dentry *dentry = file_dentry(file);
 	int rc = 0;
+	struct ns_status *status = NULL;
 
 	/* do not collect and update hash for digital signatures */
 	if (test_bit(IMA_DIGSIG, &iint->atomic_flags))
@@ -356,7 +357,12 @@ void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file)
 	    !(iint->flags & IMA_HASH))
 		return;
 
-	rc = ima_collect_measurement(iint, file, NULL, 0, ima_hash_algo);
+	status = ima_get_ns_status(get_current_ns(), file_inode(file), iint);
+	if (IS_ERR(status))
+		return;
+
+	rc = ima_collect_measurement(iint, status, file, NULL, 0, ima_hash_algo);
+	ns_status_put(status);
 	if (rc < 0)
 		return;
 

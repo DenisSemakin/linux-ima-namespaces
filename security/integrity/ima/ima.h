@@ -222,6 +222,7 @@ int ima_get_action(struct inode *inode, const struct cred *cred, u32 secid,
 		   struct ima_namespace *ns, struct ima_namespace *policy_ns);
 int ima_must_measure(struct inode *inode, int mask, enum ima_hooks func);
 int ima_collect_measurement(struct integrity_iint_cache *iint,
+			    struct ns_status *status,
 			    struct file *file, void *buf, loff_t size,
 			    enum hash_algo algo);
 void ima_store_measurement(struct integrity_iint_cache *iint, struct file *file,

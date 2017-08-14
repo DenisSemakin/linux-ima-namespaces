@@ -230,6 +230,7 @@ int ima_get_action(struct inode *inode, const struct cred *cred, u32 secid,
  * Return 0 on success, error code otherwise
  */
 int ima_collect_measurement(struct integrity_iint_cache *iint,
+			    struct ns_status *status,
 			    struct file *file, void *buf, loff_t size,
 			    enum hash_algo algo)
 {
@@ -244,8 +245,9 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 		struct ima_digest_data hdr;
 		char digest[IMA_MAX_DIGEST_SIZE];
 	} hash;
+	unsigned long flags = iint_flags(iint, status);
 
-	if (iint->flags & IMA_COLLECTED)
+	if (flags & IMA_COLLECTED)
 		goto out;
 
 	/*
@@ -280,7 +282,7 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 
 	/* Possibly temporary failure due to type of read (eg. O_DIRECT) */
 	if (!result)
-		iint->flags |= IMA_COLLECTED;
+		set_iint_flags(iint, status, flags | IMA_COLLECTED);
 out:
 	if (result) {
 		if (file->f_flags & O_DIRECT)
