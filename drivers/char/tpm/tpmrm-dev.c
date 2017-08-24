@@ -18,6 +18,10 @@ static int tpmrm_open(struct inode *inode, struct file *file)
 	int rc;
 
 	chip = container_of(inode->i_cdev, struct tpm_chip, cdevs);
+
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
+
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
 		return -ENOMEM;

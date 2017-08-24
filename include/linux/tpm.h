@@ -27,6 +27,7 @@
 struct tpm_chip;
 struct trusted_key_payload;
 struct trusted_key_options;
+struct ima_namespace;
 
 enum TPM_OPS_FLAGS {
 	TPM_OPS_AUTO_STARTUP = BIT(0),
@@ -48,6 +49,8 @@ struct tpm_class_ops {
 	int (*request_locality)(struct tpm_chip *chip, int loc);
 	int (*relinquish_locality)(struct tpm_chip *chip, int loc);
 	void (*clk_enable)(struct tpm_chip *chip, bool value);
+	bool (*allow_access)(struct tpm_chip *chip,
+			     struct ima_namespace *ns);
 };
 
 #if defined(CONFIG_TCG_TPM) || defined(CONFIG_TCG_TPM_MODULE)

@@ -45,6 +45,9 @@ static ssize_t pubek_show(struct device *dev, struct device_attribute *attr,
 	struct tpm_chip *chip = to_tpm_chip(dev);
 	char anti_replay[20];
 
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
+
 	memset(&anti_replay, 0, sizeof(anti_replay));
 
 	rc = tpm_buf_init(&tpm_buf, TPM_TAG_RQU_COMMAND, TPM_ORD_READPUBEK);
@@ -106,6 +109,9 @@ static ssize_t pcrs_show(struct device *dev, struct device_attribute *attr,
 	char *str = buf;
 	struct tpm_chip *chip = to_tpm_chip(dev);
 
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
+
 	rc = tpm_getcap(chip, TPM_CAP_PROP_PCR, &cap,
 			"attempting to determine the number of PCRS",
 			sizeof(cap.num_pcrs));
@@ -132,6 +138,9 @@ static ssize_t enabled_show(struct device *dev, struct device_attribute *attr,
 	cap_t cap;
 	ssize_t rc;
 
+	if (!tpm_allow_ima_ns_access(to_tpm_chip(dev)))
+		return -EPERM;
+
 	rc = tpm_getcap(to_tpm_chip(dev), TPM_CAP_FLAG_PERM, &cap,
 			"attempting to determine the permanent enabled state",
 			sizeof(cap.perm_flags));
@@ -148,6 +157,9 @@ static ssize_t active_show(struct device *dev, struct device_attribute *attr,
 {
 	cap_t cap;
 	ssize_t rc;
+
+	if (!tpm_allow_ima_ns_access(to_tpm_chip(dev)))
+		return -EPERM;
 
 	rc = tpm_getcap(to_tpm_chip(dev), TPM_CAP_FLAG_PERM, &cap,
 			"attempting to determine the permanent active state",
@@ -166,6 +178,9 @@ static ssize_t owned_show(struct device *dev, struct device_attribute *attr,
 	cap_t cap;
 	ssize_t rc;
 
+	if (!tpm_allow_ima_ns_access(to_tpm_chip(dev)))
+		return -EPERM;
+
 	rc = tpm_getcap(to_tpm_chip(dev), TPM_CAP_PROP_OWNER, &cap,
 			"attempting to determine the owner state",
 			sizeof(cap.owned));
@@ -182,6 +197,9 @@ static ssize_t temp_deactivated_show(struct device *dev,
 {
 	cap_t cap;
 	ssize_t rc;
+
+	if (!tpm_allow_ima_ns_access(to_tpm_chip(dev)))
+		return -EPERM;
 
 	rc = tpm_getcap(to_tpm_chip(dev), TPM_CAP_FLAG_VOL, &cap,
 			"attempting to determine the temporary state",
@@ -201,6 +219,9 @@ static ssize_t caps_show(struct device *dev, struct device_attribute *attr,
 	cap_t cap;
 	ssize_t rc;
 	char *str = buf;
+
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
 
 	rc = tpm_getcap(chip, TPM_CAP_PROP_MANUFACTURER, &cap,
 			"attempting to determine the manufacturer",
@@ -257,6 +278,9 @@ static ssize_t durations_show(struct device *dev, struct device_attribute *attr,
 {
 	struct tpm_chip *chip = to_tpm_chip(dev);
 
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
+
 	if (chip->duration[TPM_LONG] == 0)
 		return 0;
 
@@ -273,6 +297,9 @@ static ssize_t timeouts_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
 	struct tpm_chip *chip = to_tpm_chip(dev);
+
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
 
 	return sprintf(buf, "%d %d %d %d [%s]\n",
 		       jiffies_to_usecs(chip->timeout_a),

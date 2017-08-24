@@ -53,6 +53,7 @@ struct proxy_dev {
 	struct work_struct work;     /* task that retrieves TPM timeouts */
 
 	struct file *file;
+	struct ima_namespace *ima_ns;
 };
 
 /* all supported flags */
@@ -87,6 +88,7 @@ static int vtpm_proxy_set_chip_imans(struct proxy_dev *proxy_dev,
 		/* lock access to it */
 		proxy_dev->file = filp;
 		get_file(proxy_dev->file);
+		proxy_dev->ima_ns = get_ima_ns(current->nsproxy->ima_ns);
 	} else {
 		printk(KERN_INFO "Error: Chip registration refused by IMA; ns tried to use TPM already?\n");
 	}
@@ -105,6 +107,9 @@ void vtpm_proxy_release_chip(struct tpm_chip *chip)
 
 	if (!proxy_dev)
 		return;
+
+	put_ima_ns(proxy_dev->ima_ns);
+	proxy_dev->ima_ns = NULL;
 
 	/* notify 'server side' application with a HUP */
 	vtpm_proxy_fops_undo_open(proxy_dev);
@@ -513,6 +518,15 @@ out:
 	return locality;
 }
 
+static bool vtpm_proxy_allow_access(struct tpm_chip *chip,
+				    struct ima_namespace *ima_ns)
+{
+	struct proxy_dev *proxy_dev = dev_get_drvdata(&chip->dev);
+
+	return ((proxy_dev->ima_ns == NULL && ima_ns == &init_ima_ns) ||
+		proxy_dev->ima_ns == ima_ns);
+}
+
 static const struct tpm_class_ops vtpm_proxy_tpm_ops = {
 	.flags = TPM_OPS_AUTO_STARTUP,
 	.recv = vtpm_proxy_tpm_op_recv,
@@ -523,6 +537,7 @@ static const struct tpm_class_ops vtpm_proxy_tpm_ops = {
 	.req_complete_val = VTPM_PROXY_REQ_COMPLETE_FLAG,
 	.req_canceled = vtpm_proxy_tpm_req_canceled,
 	.request_locality = vtpm_proxy_request_locality,
+	.allow_access = vtpm_proxy_allow_access,
 };
 
 /*

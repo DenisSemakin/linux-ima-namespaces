@@ -27,6 +27,9 @@ static int tpm_open(struct inode *inode, struct file *file)
 
 	chip = container_of(inode->i_cdev, struct tpm_chip, cdev);
 
+	if (!tpm_allow_ima_ns_access(chip))
+		return -EPERM;
+
 	/* It's assured that the chip will be opened just once,
 	 * by the check of is_open variable, which is protected
 	 * by driver_lock. */

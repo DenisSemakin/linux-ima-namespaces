@@ -36,6 +36,7 @@
 #include <linux/cdev.h>
 #include <linux/highmem.h>
 #include <linux/tpm_eventlog.h>
+#include <linux/ima.h>
 #include <crypto/hash_info.h>
 
 #ifdef CONFIG_X86
@@ -503,6 +504,14 @@ static inline void tpm_buf_append_u32(struct tpm_buf *buf, const u32 value)
 	__be32 value2 = cpu_to_be32(value);
 
 	tpm_buf_append(buf, (u8 *) &value2, 4);
+}
+
+static inline bool tpm_allow_ima_ns_access(struct tpm_chip *chip)
+{
+	if (chip->ops->allow_access &&
+	    !chip->ops->allow_access(chip, current->nsproxy->ima_ns))
+		return false;
+	return true;
 }
 
 extern struct class *tpm_class;
