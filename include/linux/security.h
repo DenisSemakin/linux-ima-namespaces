@@ -53,6 +53,7 @@ struct msg_msg;
 struct xattr;
 struct xfrm_sec_ctx;
 struct mm_struct;
+struct kernfs_node;
 
 /* If capable should audit the security request */
 #define SECURITY_CAP_NOAUDIT 0
@@ -1741,6 +1742,8 @@ struct dentry *securityfs_create_symlink(const char *name,
 					 const char *target,
 					 const struct inode_operations *iops);
 extern void securityfs_remove(struct dentry *dentry);
+
+extern struct kernfs_node *security_kernfs;
 
 #else /* CONFIG_SECURITYFS */
 
