@@ -29,8 +29,11 @@
 #include <linux/ima.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
+#include <linux/security.h>
 
 #include "ima.h"
+
+static struct vfsmount *imafs_mnt;
 
 static DEFINE_MUTEX(ima_write_mutex);
 
@@ -517,7 +520,7 @@ static const char * ima_symlink_get_link(struct dentry *dentry,
 	if (!dentry)
 		return ERR_PTR(-ECHILD);
 
-	path.mnt = mntget(securityfs_get_mount());
+	path.mnt = mntget(imafs_mnt);
 	path.dentry = dget(ns->sfs.dentry[IMAFS_DENTRY_DIR]
 	                   ? ns->sfs.dentry[IMAFS_DENTRY_DIR]
 	                   : ima_dir);
@@ -645,21 +648,109 @@ out:
 	return err;
 }
 
+static int imafs_show_path(struct seq_file *seq, struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+
+	seq_printf(seq, "imafs:[%lu]", inode->i_ino);
+	return 0;
+}
+
+static void imafs_evict_inode(struct inode *inode)
+{
+	truncate_inode_pages_final(&inode->i_data);
+	clear_inode(inode);
+	if (S_ISLNK(inode->i_mode))
+		kfree(inode->i_link);
+}
+
+static const struct super_operations imafs_super_ops = {
+	.statfs = simple_statfs,
+	.evict_inode = imafs_evict_inode,
+	.show_path = imafs_show_path,
+};
+
+static int fill_super(struct super_block *sb, void *data, int silent)
+{
+	int error;
+
+	static const struct tree_descr imafs_files[] = {
+		/* last one */
+		{""}
+	};
+
+	error = simple_fill_super(sb, 0x00519730, imafs_files);
+	if (error)
+		return error;
+	sb->s_op = &imafs_super_ops;
+
+	return 0;
+}
+
+static struct dentry *imafs_mount(struct file_system_type *fs_type,
+				  int flags, const char *dev_name, void *data)
+{
+	return mount_single(fs_type, flags, data, fill_super);
+}
+
+static struct file_system_type imafs_ops = {
+	.owner = THIS_MODULE,
+	.name = "imafs",
+	.mount = imafs_mount,
+	.kill_sb = kill_anon_super,
+	.fs_flags = FS_USERNS_MOUNT,
+};
+
 int __init ima_fs_init(void)
 {
+	int ret = 0;
+	struct kernfs_node *dotima, *imalink;
+
+	imafs_mnt = kern_mount(&imafs_ops);
+	if (IS_ERR(imafs_mnt))
+		panic("can't set imafs up\n");
+	imafs_mnt->mnt_sb->s_flags &= ~SB_NOUSER;
+	imafs_mnt->mnt_sb->s_iflags |= SB_I_USERNS_VISIBLE;
+
+	/* for !init_user_ns: create sysfs .ima dir and ima symlink to it */
+	dotima = kernfs_create_empty_dir(security_kernfs, ".ima");
+	if (IS_ERR(dotima)) {
+		ret = PTR_ERR(dotima);
+		goto unmount;
+	}
+
+	imalink = kernfs_create_link_iops(security_kernfs, "ima", dotima,
+					  &ima_symlink_link_iops);
+	if (IS_ERR(imalink)) {
+		ret = PTR_ERR(imalink);
+		goto kernfs_rmdir;
+	}
+
+	/* for init_user_ns: create sysfs .ima dir and ima symlink to it */
 	ima_dir = securityfs_create_file(".ima", S_IFDIR | 0000,
 					 NULL, NULL, NULL);
-	if (IS_ERR(ima_dir))
-		return -1;
+	if (IS_ERR(ima_dir)) {
+		ret = PTR_ERR(ima_dir);
+		goto kernfs_rmlink;
+	}
 
 	ima_symlink = securityfs_create_symlink("ima", NULL, NULL,
 						&ima_symlink_link_iops);
-	if (IS_ERR(ima_symlink))
-		goto out;
+	if (IS_ERR(ima_symlink)) {
+		ret = PTR_ERR(ima_symlink);
+		goto securityfs_rm_file;
+	}
 
 	return 0;
-out:
-	securityfs_remove(ima_dir);
 
-	return -1;
+securityfs_rm_file:
+	securityfs_remove(ima_dir);
+kernfs_rmlink:
+	kernfs_remove(imalink);
+kernfs_rmdir:
+	kernfs_remove(dotima);
+unmount:
+	kern_unmount(imafs_mnt);
+
+	return ret;
 }
