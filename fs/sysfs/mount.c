@@ -38,7 +38,8 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 	if (!new_sb)
 		kobj_ns_drop(KOBJ_NS_TYPE_NET, ns);
 	else if (!IS_ERR(root))
-		root->d_sb->s_iflags |= SB_I_USERNS_VISIBLE;
+		root->d_sb->s_iflags |= SB_I_USERNS_VISIBLE |
+					SB_I_NEVER_TOO_REVEALING;
 
 	return root;
 }

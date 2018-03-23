@@ -3366,7 +3366,8 @@ static bool mount_too_revealing(struct vfsmount *mnt, int *new_mnt_flags)
 
 	/* Can this filesystem be too revealing? */
 	s_iflags = mnt->mnt_sb->s_iflags;
-	if (!(s_iflags & SB_I_USERNS_VISIBLE))
+	if (!(s_iflags & SB_I_USERNS_VISIBLE) ||
+	     (s_iflags & SB_I_NEVER_TOO_REVEALING))
 		return false;
 
 	if ((s_iflags & required_iflags) != required_iflags) {
