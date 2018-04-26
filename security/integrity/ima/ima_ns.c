@@ -54,6 +54,7 @@ static struct ima_namespace *create_ima_ns(struct user_namespace *user_ns,
 	ns = kmalloc(sizeof(*ns), GFP_KERNEL);
 	if (!ns)
 		goto fail_dec;
+	printk(KERN_INFO "new ns: %p\n", ns);
 
 	err = ima_init_namespace(ns);
 	if (err)
@@ -124,6 +125,7 @@ static void destroy_ima_ns(struct ima_namespace *ns)
 	free_ns_status_cache(ns);
 	ima_free_queue_entries(ns);
 	ima_ns_fs_free(ns);
+	printk(KERN_INFO "freeing ns %p\n", ns);
 	kfree(ns);
 }
 

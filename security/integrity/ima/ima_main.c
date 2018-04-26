@@ -247,6 +247,8 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 			status = ima_get_ns_status(ns, inode, iint);
 			if (IS_ERR(status))
 				rc = PTR_ERR(status);
+			if (get_current_ns() != &init_ima_ns)
+				printk(KERN_INFO "got status: %p\n", status);
 		}
 	}
 
@@ -291,6 +293,9 @@ static int _process_measurement(struct file *file, const struct cred *cred,
 	flags = set_iint_flags(iint, status, flags | action);
 	action &= IMA_DO_MASK;
 	action &= ~((flags & (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
+
+	if (status && get_current_ns() != &init_ima_ns)
+		printk(KERN_INFO "action=0x%08x\n", action);
 
 	/* If target pcr is already measured, unset IMA_MEASURE action */
 	if ((action & IMA_MEASURE) && (status->measured_pcrs & (0x1 << pcr)))

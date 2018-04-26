@@ -34,6 +34,7 @@ void free_ns_status_cache(struct ima_namespace *ns)
 		iint_put(status->iint);
 
 		kmem_cache_free(ns->ns_status_cache, status);
+		printk(KERN_INFO "free status: %p; ns : %p\n", status, ns);
 	}
 	ns->ns_status_tree = RB_ROOT;
 	write_unlock(&ns->ns_status_lock);
@@ -183,6 +184,8 @@ get_new:
 		kref_init(&status->ref);
 		ns_status_get(status);
 		INIT_LIST_HEAD(&status->ns_next);
+
+		printk(KERN_INFO "new status: %p, ns: %p\n", status, ns);
 
 		write_lock(&ns->ns_status_lock);
 	}
