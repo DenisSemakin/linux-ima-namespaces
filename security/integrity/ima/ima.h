@@ -325,8 +325,8 @@ static inline int ima_read_xattr(struct dentry *dentry,
 
 #endif /* CONFIG_IMA_APPRAISE */
 
-#define IMA_NS_STATUS_ACTIONS   IMA_AUDIT
-#define IMA_NS_STATUS_FLAGS     IMA_AUDITED
+#define IMA_NS_STATUS_ACTIONS   (IMA_AUDIT | IMA_MEASURE)
+#define IMA_NS_STATUS_FLAGS     (IMA_AUDITED | IMA_MEASURED)
 
 int ima_ns_init(void);
 struct ima_namespace;
