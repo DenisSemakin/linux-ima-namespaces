@@ -214,7 +214,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 			rc = -ENOMEM;
 
 		if (!rc && (action & IMA_NS_STATUS_ACTIONS)) {
-			status = ima_get_ns_status(get_current_ns(), inode);
+			status = ima_get_ns_status(get_current_ns(), inode, iint);
 			if (IS_ERR(status))
 				rc = PTR_ERR(status);
 		}

@@ -130,8 +130,11 @@ extern bool ima_canonical_fmt;
 
 struct ns_status {
 	struct kref ref;
+	struct list_head ns_next;
 	struct rb_node rb_node;
+	struct integrity_iint_cache *iint;
 	struct inode *inode;
+	struct ima_namespace *ns;
 	ino_t i_ino;
 	u32 i_generation;
 	unsigned long flags;
@@ -151,6 +154,8 @@ static inline void ns_status_put(struct ns_status *status)
 	if (status)
 		kref_put(&status->ref, ns_status_free);
 }
+
+void ima_ns_status_list_del(struct ns_status *status);
 
 /* Internal IMA function definitions */
 int ima_init(void);
@@ -329,14 +334,16 @@ int ima_init_namespace(struct ima_namespace *ns);
 
 #ifdef CONFIG_IMA_NS
 struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
-				    struct inode *inode);
+				    struct inode *inode,
+				    struct integrity_iint_cache *iint);
 unsigned long iint_flags(struct integrity_iint_cache *iint,
 			 struct ns_status *status);
 unsigned long set_iint_flags(struct integrity_iint_cache *iint,
 			     struct ns_status *status, unsigned long flags);
 #else
 static inline struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
-						  struct inode *inode)
+						  struct inode *inode,
+						  struct integrity_iint_cache *iint)
 {
 	return NULL;
 }
