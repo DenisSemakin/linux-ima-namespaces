@@ -34,6 +34,7 @@
 #define IMA_EUID	0x0080
 #define IMA_PCR		0x0100
 #define IMA_FSNAME	0x0200
+#define IMA_NS		0x0400  /* rule applies only to child namespaces */
 
 #define UNKNOWN		0
 #define MEASURE		0x0001	/* same as IMA_MEASURE */
@@ -266,6 +267,48 @@ static void ima_lsm_update_rules(void)
 	}
 }
 
+static bool ima_uid_op(const struct cred *cred, struct ima_rule_entry *rule)
+{
+	kuid_t right;
+	struct user_namespace *user_ns;
+
+	/*
+	 * The 'ns' attribute makes the uid in the rule relative to the
+	 * current user namespace. So '... ns uid=123' applies to uid=123
+	 * in the current user namespace.
+	 * Without an 'ns' attribute 'uid=123' refers to the
+	 * uid = 123 of the user namespace where the policy resides in.
+	 * (currently init_ima_ns.user_ns == &init_user_ns)
+	 */
+	if (rule->flags & IMA_NS)
+		user_ns = current_user_ns();
+	else
+		user_ns = init_ima_ns.user_ns;
+
+	right = make_kuid(user_ns, __kuid_val(rule->uid));
+	if (!uid_valid(right))
+		return false;
+
+	return rule->uid_op(cred->uid, right);
+}
+
+static bool ima_fowner_op(kuid_t left, struct ima_rule_entry *rule)
+{
+	kuid_t right;
+	struct user_namespace *user_ns;
+
+	if (rule->flags & IMA_NS)
+		user_ns = current_user_ns();
+	else
+		user_ns = init_ima_ns.user_ns;
+
+	right = make_kuid(user_ns, __kuid_val(rule->uid));
+	if (!uid_valid(right))
+		return false;
+
+	return rule->fowner_op(left, right);
+}
+
 /**
  * ima_match_rules - determine whether an inode matches the measure rule.
  * @rule: a pointer to a rule
@@ -301,7 +344,7 @@ static bool ima_match_rules(struct ima_rule_entry *rule, struct inode *inode,
 	if ((rule->flags & IMA_FSUUID) &&
 	    !uuid_equal(&rule->fsuuid, &inode->i_sb->s_uuid))
 		return false;
-	if ((rule->flags & IMA_UID) && !rule->uid_op(cred->uid, rule->uid))
+	if ((rule->flags & IMA_UID) && !ima_uid_op(cred, rule))
 		return false;
 	if (rule->flags & IMA_EUID) {
 		if (has_capability_noaudit(current, CAP_SETUID)) {
@@ -314,7 +357,7 @@ static bool ima_match_rules(struct ima_rule_entry *rule, struct inode *inode,
 	}
 
 	if ((rule->flags & IMA_FOWNER) &&
-	    !rule->fowner_op(inode->i_uid, rule->fowner))
+	    ima_fowner_op(inode->i_uid, rule))
 		return false;
 	for (i = 0; i < MAX_LSM_RULES; i++) {
 		int rc = 0;
@@ -391,6 +434,7 @@ static int get_subaction(struct ima_rule_entry *rule, enum ima_hooks func)
  * @func: IMA hook identifier
  * @mask: requested action (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC)
  * @pcr: set the pcr to extend
+ * @ns: the IMA namespace
  *
  * Measure decision based on func/mask/fsmagic and LSM(subj/obj/type)
  * conditions.
@@ -400,7 +444,8 @@ static int get_subaction(struct ima_rule_entry *rule, enum ima_hooks func)
  * than writes so ima_match_policy() is classical RCU candidate.
  */
 int ima_match_policy(struct inode *inode, const struct cred *cred, u32 secid,
-		     enum ima_hooks func, int mask, int flags, int *pcr)
+		     enum ima_hooks func, int mask, int flags, int *pcr,
+		     struct ima_namespace *ns)
 {
 	struct ima_rule_entry *entry;
 	int action = 0, actmask = flags | (flags << 1);
@@ -410,6 +455,19 @@ int ima_match_policy(struct inode *inode, const struct cred *cred, u32 secid,
 
 		if (!(entry->action & actmask))
 			continue;
+
+		switch (entry->action) {
+		case AUDIT:
+			/*
+			 * A rule with 'ns' attribute does not
+			 * apply to the namespace the policy is in
+			 * (here: init_ima_ns)
+			 */
+			if (ns == &init_ima_ns &&
+			    entry->flags & IMA_NS)
+				continue;
+			break;
+		}
 
 		if (!ima_match_rules(entry, inode, cred, secid, func, mask))
 			continue;
@@ -592,7 +650,7 @@ enum {
 	Opt_uid_gt, Opt_euid_gt, Opt_fowner_gt,
 	Opt_uid_lt, Opt_euid_lt, Opt_fowner_lt,
 	Opt_appraise_type, Opt_permit_directio,
-	Opt_pcr
+	Opt_pcr, Opt_ns,
 };
 
 static match_table_t policy_tokens = {
@@ -626,6 +684,7 @@ static match_table_t policy_tokens = {
 	{Opt_appraise_type, "appraise_type=%s"},
 	{Opt_permit_directio, "permit_directio"},
 	{Opt_pcr, "pcr=%s"},
+	{Opt_ns, "ns"},
 	{Opt_err, NULL}
 };
 
@@ -957,6 +1016,13 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 		case Opt_permit_directio:
 			entry->flags |= IMA_PERMIT_DIRECTIO;
 			break;
+		case Opt_ns:
+			if (entry->action != AUDIT) {
+				result = -EINVAL;
+				break;
+			}
+			entry->flags |= IMA_NS;
+			break;
 		case Opt_pcr:
 			if (entry->action != MEASURE) {
 				result = -EINVAL;
@@ -1247,6 +1313,8 @@ int ima_policy_show(struct seq_file *m, void *v)
 		seq_puts(m, "appraise_type=imasig ");
 	if (entry->flags & IMA_PERMIT_DIRECTIO)
 		seq_puts(m, "permit_directio ");
+	if (entry->flags & IMA_NS)
+		seq_puts(m, "ns ");
 	rcu_read_unlock();
 	seq_puts(m, "\n");
 	return 0;
