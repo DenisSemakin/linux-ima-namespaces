@@ -231,7 +231,8 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 void ima_store_measurement(struct integrity_iint_cache *iint, struct file *file,
 			   const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
-			   int xattr_len, int pcr);
+			   int xattr_len, int pcr,
+			   struct ns_status *status);
 void ima_audit_measurement(struct integrity_iint_cache *iint,
 			   const unsigned char *filename,
 			   struct ns_status *status);

@@ -280,7 +280,8 @@ out:
 void ima_store_measurement(struct integrity_iint_cache *iint,
 			   struct file *file, const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
-			   int xattr_len, int pcr)
+			   int xattr_len, int pcr,
+			   struct ns_status *status)
 {
 	static const char op[] = "add_template_measure";
 	static const char audit_cause[] = "ENOMEM";
@@ -290,6 +291,7 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 	struct ima_event_data event_data = {iint, file, filename, xattr_value,
 					    xattr_len, NULL};
 	int violation = 0;
+	unsigned long flags = iint_flags(iint, status);
 
 	if (iint->measured_pcrs & (0x1 << pcr))
 		return;
@@ -303,7 +305,7 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 
 	result = ima_store_template(entry, violation, inode, filename, pcr);
 	if ((!result || result == -EEXIST) && !(file->f_flags & O_DIRECT)) {
-		iint->flags |= IMA_MEASURED;
+		set_iint_flags(iint, status, flags | IMA_MEASURED);
 		iint->measured_pcrs |= (0x1 << pcr);
 	}
 	if (result < 0)
