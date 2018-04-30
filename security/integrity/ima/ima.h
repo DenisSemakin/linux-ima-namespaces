@@ -137,6 +137,7 @@ struct ns_status {
 	ino_t i_ino;
 	u32 i_generation;
 	unsigned long flags;
+	unsigned long measured_pcrs;
 };
 
 static inline struct ns_status *ns_status_get(struct ns_status *status)

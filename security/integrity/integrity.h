@@ -122,7 +122,6 @@ struct integrity_iint_cache {
 	struct inode *inode;	/* back pointer to inode in question */
 	u64 version;		/* track inode changes */
 	unsigned long flags;
-	unsigned long measured_pcrs;
 	unsigned long atomic_flags;
 	enum integrity_status ima_file_status:4;
 	enum integrity_status ima_mmap_status:4;

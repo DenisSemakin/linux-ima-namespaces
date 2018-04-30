@@ -421,6 +421,7 @@ static int ima_protect_xattr(struct dentry *dentry, const char *xattr_name,
 static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 {
 	struct integrity_iint_cache *iint;
+	struct ns_status *status;
 
 	if (!(ima_policy_flag & IMA_APPRAISE) || !S_ISREG(inode->i_mode))
 		return;
@@ -428,7 +429,12 @@ static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 	iint = integrity_iint_find(inode);
 	if (!iint)
 		return;
-	iint->measured_pcrs = 0;
+
+	read_lock(&iint->ns_list_lock);
+	list_for_each_entry(status, &iint->ns_list, ns_next)
+		status->measured_pcrs = 0;
+	read_unlock(&iint->ns_list_lock);
+
 	set_bit(IMA_CHANGE_XATTR, &iint->atomic_flags);
 	if (digsig)
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);

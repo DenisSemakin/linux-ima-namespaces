@@ -197,6 +197,7 @@ get_new:
 	status->i_generation = inode->i_generation;
 	status->flags = 0UL;
 	status->ns = ns;
+	status->measured_pcrs = 0;
 
 	write_lock(&iint->ns_list_lock);
 	if (list_empty(&status->ns_next))

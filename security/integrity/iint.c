@@ -86,7 +86,6 @@ void iint_free(struct kref *ref)
 	iint->ima_read_status = INTEGRITY_UNKNOWN;
 	iint->ima_creds_status = INTEGRITY_UNKNOWN;
 	iint->evm_status = INTEGRITY_UNKNOWN;
-	iint->measured_pcrs = 0;
 	kmem_cache_free(iint_cache, iint);
 }
 

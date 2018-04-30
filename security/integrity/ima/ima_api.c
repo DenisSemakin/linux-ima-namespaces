@@ -313,7 +313,7 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 	int violation = 0;
 	unsigned long flags = iint_flags(iint, status);
 
-	if (iint->measured_pcrs & (0x1 << pcr))
+	if (status->measured_pcrs & (0x1 << pcr))
 		return;
 
 	result = ima_alloc_init_template(&event_data, &entry);
@@ -327,7 +327,7 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 				    status->ns);
 	if ((!result || result == -EEXIST) && !(file->f_flags & O_DIRECT)) {
 		set_iint_flags(iint, status, flags | IMA_MEASURED);
-		iint->measured_pcrs |= (0x1 << pcr);
+		status->measured_pcrs |= (0x1 << pcr);
 	}
 	if (result < 0)
 		ima_free_template_entry(entry);

@@ -126,6 +126,7 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 {
 	fmode_t mode = file->f_mode;
 	bool update;
+	struct ns_status *status;
 
 	if (!(mode & FMODE_WRITE))
 		return;
@@ -138,7 +139,12 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 		    !inode_eq_iversion(inode, iint->version) ||
 		    (iint->flags & IMA_NEW_FILE)) {
 			iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
-			iint->measured_pcrs = 0;
+
+			read_lock(&iint->ns_list_lock);
+			list_for_each_entry(status, &iint->ns_list, ns_next)
+				status->measured_pcrs = 0;
+			read_unlock(&iint->ns_list_lock);
+
 			if (update)
 				ima_update_xattr(iint, file);
 		}
@@ -253,7 +259,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	     !(inode->i_sb->s_iflags & SB_I_UNTRUSTED_MOUNTER) &&
 	     !(action & IMA_FAIL_UNVERIFIABLE_SIGS))) {
 		flags &= ~IMA_DONE_MASK;
-		iint->measured_pcrs = 0;
+		status->measured_pcrs = 0;
 	}
 
 	/* Determine if already appraised/measured based on bitmask
@@ -265,7 +271,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	action &= ~((flags & (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
 
 	/* If target pcr is already measured, unset IMA_MEASURE action */
-	if ((action & IMA_MEASURE) && (iint->measured_pcrs & (0x1 << pcr)))
+	if ((action & IMA_MEASURE) && (status->measured_pcrs & (0x1 << pcr)))
 		action ^= IMA_MEASURE;
 
 	/* HASH sets the digital signature and update flags, nothing else */
