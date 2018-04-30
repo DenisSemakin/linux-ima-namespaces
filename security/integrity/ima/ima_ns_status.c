@@ -53,21 +53,6 @@ static struct ns_status *__ima_ns_status_find(struct ima_namespace *ns,
 	return status;
 }
 
-/*
- * ima_ns_status_find - return the ns_status associated with an inode
- */
-static struct ns_status *ima_ns_status_find(struct ima_namespace *ns,
-					    struct inode *inode)
-{
-	struct ns_status *status;
-
-	read_lock(&ns->ns_status_lock);
-	status = __ima_ns_status_find(ns, inode);
-	read_unlock(&ns->ns_status_lock);
-
-	return status;
-}
-
 void insert_ns_status(struct ima_namespace *ns, struct inode *inode,
 		      struct ns_status *status)
 {
@@ -89,13 +74,30 @@ void insert_ns_status(struct ima_namespace *ns, struct inode *inode,
 	rb_insert_color(node, &ns->ns_status_tree);
 }
 
+void ns_status_free(struct kref *ref)
+{
+	struct ns_status *status = container_of(ref, struct ns_status, ref);
+
+	kmem_cache_free(status->ns->ns_status_cache, status);
+}
+
+static void __ima_ns_status_free(struct ima_namespace *ns,
+				 struct ns_status *status)
+{
+	ns_status_put(status);
+}
+
 struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
 				    struct inode *inode)
 {
 	struct ns_status *status;
 	int skip_insert = 0;
 
-	status = ima_ns_status_find(ns, inode);
+	read_lock(&ns->ns_status_lock);
+
+	status = ns_status_get(__ima_ns_status_find(ns, inode));
+
+	read_unlock(&ns->ns_status_lock);
 	if (status) {
 		/*
 		 * Unlike integrity_iint_cache we are not free'ing the
@@ -115,6 +117,7 @@ struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
 		status = kmem_cache_alloc(ns->ns_status_cache, GFP_NOFS);
 		if (!status)
 			return ERR_PTR(-ENOMEM);
+		kref_init(&status->ref);
 	}
 
 	write_lock(&ns->ns_status_lock);

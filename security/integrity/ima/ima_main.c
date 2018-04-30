@@ -321,6 +321,7 @@ out_locked:
 	mutex_unlock(&iint->mutex);
 	kfree(xattr_value);
 out:
+	ns_status_put(status);
 	if (pathbuf)
 		__putname(pathbuf);
 	if (must_appraise) {

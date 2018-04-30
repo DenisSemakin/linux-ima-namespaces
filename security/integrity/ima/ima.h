@@ -129,12 +129,28 @@ static inline void ima_load_kexec_buffer(void) {}
 extern bool ima_canonical_fmt;
 
 struct ns_status {
+	struct kref ref;
 	struct rb_node rb_node;
 	struct inode *inode;
 	ino_t i_ino;
 	u32 i_generation;
 	unsigned long flags;
 };
+
+static inline struct ns_status *ns_status_get(struct ns_status *status)
+{
+	if (status)
+		kref_get(&status->ref);
+	return status;
+}
+
+void ns_status_free(struct kref *ref);
+
+static inline void ns_status_put(struct ns_status *status)
+{
+	if (status)
+		kref_put(&status->ref, ns_status_free);
+}
 
 /* Internal IMA function definitions */
 int ima_init(void);
