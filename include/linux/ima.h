@@ -125,6 +125,8 @@ struct ima_namespace {
 
 	struct rw_semaphore tpm_chip_lock;
 	struct tpm_chip *tpm_chip;
+
+	struct list_head ima_measurements;
 };
 
 extern struct ima_namespace init_ima_ns;
@@ -149,6 +151,13 @@ static inline void put_ima_ns(struct ima_namespace *ns)
 		kref_put(&ns->kref, free_ima_ns);
 }
 
+static inline struct list_head *get_measurements(void)
+{
+	return &current->nsproxy->ima_ns->ima_measurements;
+}
+
+void ima_free_queue_entries(struct ima_namespace *ns);
+
 #else
 
 static inline struct ima_namespace *copy_ima_ns(bool copy,
@@ -165,6 +174,11 @@ static inline struct ima_namespace *get_ima_ns(struct ima_namespace *ns)
 
 static inline void put_ima_ns(struct ima_namespace *ns)
 {
+}
+
+static inline struct list_head *get_measurements(void)
+{
+	return &init_ima_ns.ima_measurements;
 }
 
 #endif /* CONFIG_IMA_NS */

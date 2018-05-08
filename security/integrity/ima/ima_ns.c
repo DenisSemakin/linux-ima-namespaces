@@ -102,6 +102,7 @@ static void destroy_ima_ns(struct ima_namespace *ns)
 	ns_free_inum(&ns->ns);
 	dec_ima_namespaces(ns->ucounts);
 	free_ns_status_cache(ns);
+	ima_free_queue_entries(ns);
 	kfree(ns);
 }
 

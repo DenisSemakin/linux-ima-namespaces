@@ -5,6 +5,7 @@
  * Serge Hallyn <serue@us.ibm.com>
  * Reiner Sailer <sailer@watson.ibm.com>
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -28,7 +29,6 @@
 
 #define AUDIT_CAUSE_LEN_MAX 32
 
-LIST_HEAD(ima_measurements);	/* list of all measurements */
 #ifdef CONFIG_IMA_KEXEC
 static unsigned long binary_runtime_size;
 #else
@@ -94,7 +94,8 @@ static int get_binary_runtime_size(struct ima_template_entry *entry)
  * (Called with ima_extend_list_mutex held.)
  */
 static int ima_add_digest_entry(struct ima_template_entry *entry,
-				bool update_htable)
+				bool update_htable,
+				struct ima_namespace *ns)
 {
 	struct ima_queue_entry *qe;
 	unsigned int key;
@@ -107,10 +108,10 @@ static int ima_add_digest_entry(struct ima_template_entry *entry,
 	qe->entry = entry;
 
 	INIT_LIST_HEAD(&qe->later);
-	list_add_tail_rcu(&qe->later, &ima_measurements);
+	list_add_tail_rcu(&qe->later, get_measurements());
 
 	atomic_long_inc(&ima_htable.len);
-	if (update_htable) {
+	if (update_htable && ns == &init_ima_ns) {
 		key = ima_hash_key(entry->digest);
 		hlist_add_head_rcu(&qe->hnext, &ima_htable.queue[key]);
 	}
@@ -162,7 +163,8 @@ static int ima_pcr_extend(const u8 *hash, int pcr)
  */
 int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 			   const char *op, struct inode *inode,
-			   const unsigned char *filename)
+			   const unsigned char *filename,
+			   struct ima_namespace *ns)
 {
 	u8 digest[TPM_DIGEST_SIZE];
 	const char *audit_cause = "hash_added";
@@ -180,7 +182,7 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 		}
 	}
 
-	result = ima_add_digest_entry(entry, 1);
+	result = ima_add_digest_entry(entry, 1, ns);
 	if (result < 0) {
 		audit_cause = "ENOMEM";
 		audit_info = 0;
@@ -204,12 +206,13 @@ out:
 	return result;
 }
 
-int ima_restore_measurement_entry(struct ima_template_entry *entry)
+int ima_restore_measurement_entry(struct ima_template_entry *entry,
+				  struct ima_namespace *ns)
 {
 	int result = 0;
 
 	mutex_lock(&ima_extend_list_mutex);
-	result = ima_add_digest_entry(entry, 0);
+	result = ima_add_digest_entry(entry, 0, ns);
 	mutex_unlock(&ima_extend_list_mutex);
 	return result;
 }

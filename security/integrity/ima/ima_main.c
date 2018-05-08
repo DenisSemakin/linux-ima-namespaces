@@ -85,7 +85,8 @@ static void ima_rdwr_violation_check(struct file *file,
 				     int must_measure,
 				     char **pathbuf,
 				     const char **pathname,
-				     char *filename)
+				     char *filename,
+				     struct ima_namespace *ns)
 {
 	struct inode *inode = file_inode(file);
 	fmode_t mode = file->f_mode;
@@ -114,10 +115,10 @@ static void ima_rdwr_violation_check(struct file *file,
 
 	if (send_tomtou)
 		ima_add_violation(file, *pathname, iint,
-				  "invalid_pcr", "ToMToU");
+				  "invalid_pcr", "ToMToU", ns);
 	if (send_writers)
 		ima_add_violation(file, *pathname, iint,
-				  "invalid_pcr", "open_writers");
+				  "invalid_pcr", "open_writers", ns);
 }
 
 static void ima_check_last_writer(struct integrity_iint_cache *iint,
@@ -184,6 +185,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	bool violation_check;
 	enum hash_algo hash_algo;
 	unsigned long flags;
+	struct ima_namespace *ns = get_current_ns();
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
@@ -214,7 +216,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 			rc = -ENOMEM;
 
 		if (!rc && (action & IMA_NS_STATUS_ACTIONS)) {
-			status = ima_get_ns_status(get_current_ns(), inode, iint);
+			status = ima_get_ns_status(ns, inode, iint);
 			if (IS_ERR(status))
 				rc = PTR_ERR(status);
 		}
@@ -222,7 +224,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 
 	if (!rc && violation_check)
 		ima_rdwr_violation_check(file, iint, action & IMA_MEASURE,
-					 &pathbuf, &pathname, filename);
+					 &pathbuf, &pathname, filename, ns);
 
 	inode_unlock(inode);
 

@@ -37,6 +37,8 @@ int ima_init_namespace(struct ima_namespace *ns)
 	if (ns != &init_ima_ns)
 		ns->tpm_chip = NULL;
 
+	INIT_LIST_HEAD(&ns->ima_measurements);
+
 	return ret;
 }
 
@@ -50,5 +52,6 @@ struct ima_namespace init_ima_ns = {
 	.user_ns = &init_user_ns,
 	.ucounts = NULL,
 	.parent = NULL,
+	.ima_measurements = LIST_HEAD_INIT(init_ima_ns.ima_measurements),
 };
 EXPORT_SYMBOL(init_ima_ns);

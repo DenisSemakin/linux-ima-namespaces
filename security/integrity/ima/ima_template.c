@@ -320,7 +320,8 @@ static int ima_restore_template_data(struct ima_template_desc *template_desc,
 }
 
 /* Restore the serialized binary measurement list without extending PCRs. */
-int ima_restore_measurement_list(loff_t size, void *buf)
+int ima_restore_measurement_list(loff_t size, void *buf,
+				 struct ima_namespace *ns)
 {
 	char template_name[MAX_TEMPLATE_NAME_LEN];
 
@@ -426,7 +427,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		       hdr[HDR_DIGEST].len);
 		entry->pcr = !ima_canonical_fmt ? *(hdr[HDR_PCR].data) :
 			     le32_to_cpu(*(hdr[HDR_PCR].data));
-		ret = ima_restore_measurement_entry(entry);
+		ret = ima_restore_measurement_entry(entry, ns);
 		if (ret < 0)
 			break;
 

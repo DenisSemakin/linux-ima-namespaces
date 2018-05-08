@@ -86,7 +86,7 @@ static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 
 	/* we need a lock since pos could point beyond last element */
 	rcu_read_lock();
-	list_for_each_entry_rcu(qe, &ima_measurements, later) {
+	list_for_each_entry_rcu(qe, get_measurements(), later) {
 		if (!l--) {
 			rcu_read_unlock();
 			return qe;
@@ -108,7 +108,7 @@ static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 	rcu_read_unlock();
 	(*pos)++;
 
-	return (&qe->later == &ima_measurements) ? NULL : qe;
+	return (&qe->later == get_measurements()) ? NULL : qe;
 }
 
 static void ima_measurements_stop(struct seq_file *m, void *v)
