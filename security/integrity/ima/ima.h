@@ -333,28 +333,21 @@ int ima_ns_init(void);
 struct ima_namespace;
 int ima_init_namespace(struct ima_namespace *ns);
 
-#ifdef CONFIG_IMA_NS
 struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
 				    struct inode *inode,
 				    struct integrity_iint_cache *iint);
+
+#ifdef CONFIG_IMA_NS
 unsigned long iint_flags(struct integrity_iint_cache *iint,
 			 struct ns_status *status);
 unsigned long set_iint_flags(struct integrity_iint_cache *iint,
 			     struct ns_status *status, unsigned long flags);
 #else
-static inline struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
-						  struct inode *inode,
-						  struct integrity_iint_cache *iint)
-{
-	return NULL;
-}
-
 static inline unsigned long iint_flags(struct integrity_iint_cache *iint,
 				       struct ns_status *status)
 {
 	return iint->flags;
 }
-
 static inline unsigned long set_iint_flags(struct integrity_iint_cache *iint,
 					   struct ns_status *status,
 					   unsigned long flags)
