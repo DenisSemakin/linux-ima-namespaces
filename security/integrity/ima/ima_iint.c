@@ -15,13 +15,12 @@
 
 void ima_iint_clear_ns_list(struct integrity_iint_cache *iint)
 {
-	struct ns_status *curr, *next;
+	LIST_HEAD(list);
 
 	write_lock(&iint->ns_list_lock);
-
-	list_for_each_entry_safe(curr, next, &iint->ns_list, ns_next)
-		ima_ns_status_list_del(curr);
-
+	list_replace(&iint->ns_list, &list);
 	write_unlock(&iint->ns_list_lock);
+
+	ns_status_off_list_free(&list);
 }
 

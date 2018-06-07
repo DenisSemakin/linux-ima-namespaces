@@ -155,7 +155,7 @@ static inline void ns_status_put(struct ns_status *status)
 		kref_put(&status->ref, ns_status_free);
 }
 
-void ima_ns_status_list_del(struct ns_status *status);
+void ns_status_off_list_free(struct list_head *list);
 
 /* Internal IMA function definitions */
 int ima_init(void);

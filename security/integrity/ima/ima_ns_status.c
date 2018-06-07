@@ -40,8 +40,11 @@ void free_ns_status_cache(struct ima_namespace *ns)
 	kmem_cache_destroy(ns->ns_status_cache);
 }
 
-static void ns_status_list_free(struct ima_namespace *ns,
-				struct list_head *head)
+/*
+ * ns_status_off_list_free: a list of items that is NOT connected to the
+ *                          iint's list anymore is to be freed
+ */
+void ns_status_off_list_free(struct list_head *head)
 {
 	struct ns_status *curr, *next;
 
@@ -50,8 +53,12 @@ static void ns_status_list_free(struct ima_namespace *ns,
 
 		iint_put(curr->iint);
 
-		rb_erase(&curr->rb_node, &ns->ns_status_tree);
+		write_lock(&curr->ns->ns_status_lock);
+
+		rb_erase(&curr->rb_node, &curr->ns->ns_status_tree);
 		RB_CLEAR_NODE(&curr->rb_node);
+
+		write_unlock(&curr->ns->ns_status_lock);
 
 		ns_status_put(curr);
 	}
@@ -91,7 +98,6 @@ void insert_ns_status(struct ima_namespace *ns, struct inode *inode,
 	struct rb_node **p;
 	struct rb_node *node, *parent = NULL;
 	struct ns_status *test_status;
-	struct list_head to_free = LIST_HEAD_INIT(to_free);
 
 	p = &ns->ns_status_tree.rb_node;
 	while (*p) {
@@ -101,16 +107,10 @@ void insert_ns_status(struct ima_namespace *ns, struct inode *inode,
 			p = &(*p)->rb_left;
 		else
 			p = &(*p)->rb_right;
-
-		/* cleanup: unused ns_status will be freed */
-		if (list_empty(&test_status->ns_next))
-			list_add(&test_status->ns_next, &to_free);
 	}
 	node = &status->rb_node;
 	rb_link_node(node, parent, p);
 	rb_insert_color(node, &ns->ns_status_tree);
-
-	ns_status_list_free(ns, &to_free);
 }
 
 void ns_status_free(struct kref *ref)
@@ -118,15 +118,6 @@ void ns_status_free(struct kref *ref)
 	struct ns_status *status = container_of(ref, struct ns_status, ref);
 
 	kmem_cache_free(status->ns->ns_status_cache, status);
-}
-
-/*
- * ima_ns_status_list_del: remove an ns_status from the list it is on
- *                         that we will free while walking the tree
- */
-void ima_ns_status_list_del(struct ns_status *status)
-{
-	list_del_init(&status->ns_next);
 }
 
 static void ima_ns_status_unlink(struct ima_namespace *ns,
