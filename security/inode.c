@@ -26,6 +26,11 @@
 static struct vfsmount *mount;
 static int mount_count;
 
+struct vfsmount *securityfs_get_mount(void)
+{
+	return mount;
+}
+
 static void securityfs_evict_inode(struct inode *inode)
 {
 	truncate_inode_pages_final(&inode->i_data);
