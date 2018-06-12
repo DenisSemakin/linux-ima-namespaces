@@ -157,6 +157,7 @@ struct ima_namespace {
 	struct {
 		unsigned long ima_fs_flags;
 		struct dentry *dentry[IMAFS_DENTRY_LAST];
+		bool dentries_mapped;
 	} sfs;
 };
 

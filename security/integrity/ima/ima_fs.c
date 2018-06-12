@@ -510,6 +510,27 @@ static const struct file_operations ima_unshare_ops = {
 };
 #endif
 
+static void ima_fs_fixup_uid_gid(struct ima_namespace *ns)
+{
+	unsigned i;
+	kuid_t kuid;
+	kgid_t kgid;
+
+	if (ns->sfs.dentries_mapped)
+		return;
+
+	kuid = make_kuid(current_user_ns(), 0);
+	if (__kuid_val(kuid) == 0)
+		return;
+
+	kgid = make_kgid(current_user_ns(), 0);
+	for (i = 0; i < IMAFS_DENTRY_LAST; i++) {
+		ns->sfs.dentry[i]->d_inode->i_uid = kuid;
+		ns->sfs.dentry[i]->d_inode->i_gid = kgid;
+	}
+	ns->sfs.dentries_mapped = true;
+}
+
 static const char * ima_symlink_get_link(struct dentry *dentry,
 					 struct inode *inode,
 					 struct delayed_call *done)
@@ -520,6 +541,7 @@ static const char * ima_symlink_get_link(struct dentry *dentry,
 	if (!dentry)
 		return ERR_PTR(-ECHILD);
 
+	ima_fs_fixup_uid_gid(ns);
 	path.mnt = mntget(imafs_mnt);
 	path.dentry = dget(ns->sfs.dentry[IMAFS_DENTRY_DIR]
 	                   ? ns->sfs.dentry[IMAFS_DENTRY_DIR]
