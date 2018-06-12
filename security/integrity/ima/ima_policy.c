@@ -435,6 +435,7 @@ static int get_subaction(struct ima_rule_entry *rule, enum ima_hooks func)
  * @mask: requested action (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC)
  * @pcr: set the pcr to extend
  * @ns: the IMA namespace
+ * @policy_ns: the IMA namespace where the policy is in
  *
  * Measure decision based on func/mask/fsmagic and LSM(subj/obj/type)
  * conditions.
@@ -445,7 +446,7 @@ static int get_subaction(struct ima_rule_entry *rule, enum ima_hooks func)
  */
 int ima_match_policy(struct inode *inode, const struct cred *cred, u32 secid,
 		     enum ima_hooks func, int mask, int flags, int *pcr,
-		     struct ima_namespace *ns)
+		     struct ima_namespace *ns, struct ima_namespace *policy_ns)
 {
 	struct ima_rule_entry *entry;
 	int action = 0, actmask = flags | (flags << 1);
@@ -461,9 +462,8 @@ int ima_match_policy(struct inode *inode, const struct cred *cred, u32 secid,
 			/*
 			 * A rule with 'ns' attribute does not
 			 * apply to the namespace the policy is in
-			 * (here: init_ima_ns)
 			 */
-			if (ns == &init_ima_ns &&
+			if (ns == policy_ns &&
 			    entry->flags & IMA_NS)
 				continue;
 			break;

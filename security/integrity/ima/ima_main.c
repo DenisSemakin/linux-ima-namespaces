@@ -173,9 +173,11 @@ void ima_file_free(struct file *file)
 	ima_check_last_writer(iint, inode, file);
 }
 
-static int process_measurement(struct file *file, const struct cred *cred,
-			       u32 secid, char *buf, loff_t size, int mask,
-			       enum ima_hooks func)
+static int _process_measurement(struct file *file, const struct cred *cred,
+				u32 secid, char *buf, loff_t size, int mask,
+				enum ima_hooks func,
+				struct ima_namespace *ns,
+				struct ima_namespace *policy_ns)
 {
 	struct inode *inode = file_inode(file);
 	struct integrity_iint_cache *iint = NULL;
@@ -191,7 +193,6 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	bool violation_check;
 	enum hash_algo hash_algo;
 	unsigned long flags;
-	struct ima_namespace *ns = get_current_ns();
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
@@ -200,8 +201,10 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	 * bitmask based on the appraise/audit/measurement policy.
 	 * Included is the appraise submask.
 	 */
-	action = ima_get_action(inode, cred, secid, mask, func, &pcr,
-				get_current_ns());
+	action = ima_get_action(inode, cred, secid, mask, func, &pcr, ns,
+				policy_ns);
+	if (ns != policy_ns)
+		action &= IMA_AUDIT;
 
 	violation_check = ((func == FILE_CHECK || func == MMAP_CHECK) &&
 			   (ima_policy_flag & IMA_MEASURE));
@@ -340,6 +343,23 @@ out:
 			set_bit(IMA_UPDATE_XATTR, &iint->atomic_flags);
 	}
 	return 0;
+}
+
+static int process_measurement(struct file *file, const struct cred *cred,
+			       u32 secid, char *buf, loff_t size, int mask,
+			       enum ima_hooks func)
+{
+	struct ima_namespace *ns = get_current_ns();
+	int ret;
+
+	ret = _process_measurement(file, cred, secid, buf, size, mask,
+				   func, ns, ns);
+
+	if (ns != &init_ima_ns)
+		_process_measurement(file, cred, secid, buf, size, mask,
+				     func, ns, &init_ima_ns);
+
+	return ret;
 }
 
 /**
