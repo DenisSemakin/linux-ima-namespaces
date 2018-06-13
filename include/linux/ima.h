@@ -122,6 +122,9 @@ struct ima_namespace {
 	struct rb_root ns_status_tree;
 	rwlock_t ns_status_lock;
 	struct kmem_cache *ns_status_cache;
+
+	struct rw_semaphore tpm_chip_lock;
+	struct tpm_chip *tpm_chip;
 };
 
 extern struct ima_namespace init_ima_ns;

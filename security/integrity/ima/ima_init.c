@@ -64,7 +64,7 @@ static int __init ima_add_boot_aggregate(void)
 	iint->ima_hash->algo = HASH_ALGO_SHA1;
 	iint->ima_hash->length = SHA1_DIGEST_SIZE;
 
-	if (ima_tpm_chip) {
+	if (init_ima_ns.tpm_chip) {
 		result = ima_calc_boot_aggregate(&hash.hdr);
 		if (result < 0) {
 			audit_cause = "hashing_error";
@@ -108,8 +108,8 @@ int __init ima_init(void)
 {
 	int rc;
 
-	ima_tpm_chip = tpm_default_chip();
-	if (!ima_tpm_chip)
+	init_ima_ns.tpm_chip = tpm_default_chip();
+	if (!init_ima_ns.tpm_chip)
 		pr_info("No TPM chip found, activating TPM-bypass!\n");
 
 	rc = integrity_init_keyring(INTEGRITY_KEYRING_IMA);

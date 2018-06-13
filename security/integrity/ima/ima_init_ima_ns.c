@@ -33,6 +33,9 @@ int ima_init_namespace(struct ima_namespace *ns)
 	if (ret)
 		kmem_cache_destroy(ns->ns_status_cache);
 #endif
+	init_rwsem(&ns->tpm_chip_lock);
+	if (ns != &init_ima_ns)
+		ns->tpm_chip = NULL;
 
 	return ret;
 }
