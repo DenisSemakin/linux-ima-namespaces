@@ -523,8 +523,8 @@ void ima_update_policy_flag(struct ima_namespace *ns)
 	if (ns != &init_ima_ns)
 		return;
 
-	ima_appraise |= (build_ima_appraise | temp_ima_appraise);
-	if (!ima_appraise)
+	ns->ima_appraise |= (build_ima_appraise | temp_ima_appraise);
+	if (!ns->ima_appraise)
 		ns->ima_policy_flag &= ~IMA_APPRAISE;
 }
 

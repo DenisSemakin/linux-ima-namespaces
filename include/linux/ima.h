@@ -178,6 +178,8 @@ struct ima_namespace {
 	unsigned char ima_keyring[IMA_KEYRING_NAME_SIZE];
 	unsigned char evm_keyring[EVM_KEYRING_NAME_SIZE];
 	struct key *keyring[INTEGRITY_KEYRING_MAX];
+
+	int ima_appraise;
 };
 
 struct tpm_provider {

@@ -23,11 +23,11 @@ static int __init default_appraise_setup(char *str)
 {
 #ifdef CONFIG_IMA_APPRAISE_BOOTPARAM
 	if (strncmp(str, "off", 3) == 0)
-		ima_appraise = 0;
+		init_ima_ns.ima_appraise = 0;
 	else if (strncmp(str, "log", 3) == 0)
-		ima_appraise = IMA_APPRAISE_LOG;
+		init_ima_ns.ima_appraise = IMA_APPRAISE_LOG;
 	else if (strncmp(str, "fix", 3) == 0)
-		ima_appraise = IMA_APPRAISE_FIX;
+		init_ima_ns.ima_appraise = IMA_APPRAISE_FIX;
 #endif
 	return 1;
 }
@@ -45,7 +45,7 @@ int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
 	u32 secid;
 	struct ima_namespace *ns = get_current_ns();
 
-	if (!ima_appraise)
+	if (!ns->ima_appraise)
 		return 0;
 
 	security_task_getsecid(current, &secid);
@@ -317,7 +317,7 @@ out:
 				    op, cause, rc, 0);
 	} else if (status != INTEGRITY_PASS) {
 		/* Fix mode, but don't replace file signatures. */
-		if ((ima_appraise & IMA_APPRAISE_FIX) &&
+		if ((ns->ima_appraise & IMA_APPRAISE_FIX) &&
 		    (!xattr_value ||
 		     xattr_value->type != EVM_IMA_XATTR_DIGSIG)) {
 			if (!ima_fix_xattr(dentry, iint))

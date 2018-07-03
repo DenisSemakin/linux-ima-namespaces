@@ -33,12 +33,6 @@
 
 #include "ima.h"
 
-#ifdef CONFIG_IMA_APPRAISE
-int ima_appraise = IMA_APPRAISE_ENFORCE;
-#else
-int ima_appraise;
-#endif
-
 int ima_hash_algo = HASH_ALGO_SHA1;
 static int hash_setup_done;
 
@@ -345,7 +339,7 @@ out:
 	if (pathbuf)
 		__putname(pathbuf);
 	if (must_appraise) {
-		if (rc && (ima_appraise & IMA_APPRAISE_ENFORCE))
+		if (rc && (ns->ima_appraise & IMA_APPRAISE_ENFORCE))
 			return -EACCES;
 		if (file->f_mode & FMODE_WRITE)
 			set_bit(IMA_UPDATE_XATTR, &iint->atomic_flags);
@@ -518,10 +512,11 @@ int ima_post_read_file(struct file *file, void *buf, loff_t size,
 {
 	enum ima_hooks func;
 	u32 secid;
+	struct ima_namespace *ns = get_current_ns();
 
 	if (!file && read_id == READING_FIRMWARE) {
-		if ((ima_appraise & IMA_APPRAISE_FIRMWARE) &&
-		    (ima_appraise & IMA_APPRAISE_ENFORCE)) {
+		if ((ns->ima_appraise & IMA_APPRAISE_FIRMWARE) &&
+		    (ns->ima_appraise & IMA_APPRAISE_ENFORCE)) {
 			pr_err("Prevent firmware loading_store.\n");
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		}
@@ -533,7 +528,7 @@ int ima_post_read_file(struct file *file, void *buf, loff_t size,
 		return 0;
 
 	if (!file || !buf || size == 0) { /* should never happen */
-		if (ima_appraise & IMA_APPRAISE_ENFORCE)
+		if (ns->ima_appraise & IMA_APPRAISE_ENFORCE)
 			return -EACCES;
 		return 0;
 	}
@@ -557,19 +552,20 @@ int ima_post_read_file(struct file *file, void *buf, loff_t size,
 int ima_load_data(enum kernel_load_data_id id)
 {
 	bool sig_enforce;
+	struct ima_namespace *ns = get_current_ns();
 
-	if ((ima_appraise & IMA_APPRAISE_ENFORCE) != IMA_APPRAISE_ENFORCE)
+	if ((ns->ima_appraise & IMA_APPRAISE_ENFORCE) != IMA_APPRAISE_ENFORCE)
 		return 0;
 
 	switch (id) {
 	case LOADING_KEXEC_IMAGE:
-		if (ima_appraise & IMA_APPRAISE_KEXEC) {
+		if (ns->ima_appraise & IMA_APPRAISE_KEXEC) {
 			pr_err("impossible to appraise a kernel image without a file descriptor; try using kexec_file_load syscall.\n");
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		}
 		break;
 	case LOADING_FIRMWARE:
-		if (ima_appraise & IMA_APPRAISE_FIRMWARE) {
+		if (ns->ima_appraise & IMA_APPRAISE_FIRMWARE) {
 			pr_err("Prevent firmware sysfs fallback loading.\n");
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		}
@@ -577,7 +573,7 @@ int ima_load_data(enum kernel_load_data_id id)
 	case LOADING_MODULE:
 		sig_enforce = is_module_sig_enforced();
 
-		if (!sig_enforce && (ima_appraise & IMA_APPRAISE_MODULES)) {
+		if (!sig_enforce && (ns->ima_appraise & IMA_APPRAISE_MODULES)) {
 			pr_err("impossible to appraise a module without a file descriptor. sig_enforce kernel parameter might help\n");
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		}

@@ -62,6 +62,9 @@ int ima_init_namespace(struct ima_namespace *ns)
 	for (i = 0; i < ARRAY_SIZE(ns->keyring); i++)
 		ns->keyring[i] = NULL;
 
+	if (ns != &init_ima_ns)
+		ns->ima_appraise = IMA_APPRAISE_ENFORCE;
+
 	return ret;
 }
 
@@ -88,6 +91,11 @@ struct ima_namespace init_ima_ns = {
 #else
 	.ima_keyring = ".ima",
 	.evm_keyring = ".evm",
+#endif
+#ifdef CONFIG_IMA_APPRAISE
+	.ima_appraise = IMA_APPRAISE_ENFORCE,
+#else
+	.ima_appraise = 0,
 #endif
 };
 EXPORT_SYMBOL(init_ima_ns);
