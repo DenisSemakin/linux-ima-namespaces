@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/security.h>
 #include <linux/kexec.h>
+#include <linux/user_namespace.h>
 #include <crypto/hash_info.h>
 struct linux_binprm;
 
@@ -209,6 +210,71 @@ static inline int ima_inode_removexattr(struct dentry *dentry,
 	return 0;
 }
 #endif /* CONFIG_IMA_APPRAISE */
+
+struct ima_namespace {
+	struct ns_common ns;
+	struct kref kref;
+	struct user_namespace *user_ns;
+};
+
+extern struct ima_namespace init_ima_ns;
+
+static inline struct ima_namespace *to_ima_ns(struct ns_common *ns)
+{
+	return container_of(ns, struct ima_namespace, ns);
+}
+
+#ifdef CONFIG_IMA_NS
+
+void free_ima_ns(struct kref *kref);
+
+static inline struct ima_namespace *get_ima_ns(struct ns_common *ns)
+{
+	if (ns)
+		kref_get(&to_ima_ns(ns)->kref);
+
+	return ns ? to_ima_ns(ns) : NULL;
+}
+
+static inline void put_ima_ns(struct ns_common *ns)
+{
+	if (ns) {
+		printk(KERN_INFO "DEREF   ima_ns: %p  ctr: %d\n", to_ima_ns(ns), kref_read(&to_ima_ns(ns)->kref));
+		kref_put(&to_ima_ns(ns)->kref, free_ima_ns);
+	}
+}
+
+struct ima_namespace *copy_ima_ns(struct ima_namespace *old_ns,
+				  struct user_namespace *user_ns);
+
+static inline struct ima_namespace *get_current_ns(void)
+{
+	return current_user_ns()->ima_ns;
+}
+
+#else
+
+static inline struct ima_namespace *get_ima_ns(struct ima_namespace *ns)
+{
+	return ns;
+}
+
+static inline void put_ima_ns(struct ima_namespace *ns)
+{
+	return;
+}
+
+static inline struct ima_namespace *copy_ima_ns(struct ima_namespace *old_ns,
+						struct ima_namespace *ima_ns)
+{
+	return old_ns;
+}
+
+static inline struct ima_namespace *get_current_ns(void)
+{
+	return &init_ima_ns;
+}
+#endif /* CONFIG_IMA_NS */
 
 #if defined(CONFIG_IMA_APPRAISE) && defined(CONFIG_INTEGRITY_TRUSTED_KEYRING)
 extern bool ima_appraise_signature(enum kernel_read_file_id func);

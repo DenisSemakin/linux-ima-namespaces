@@ -20,6 +20,7 @@
 #include <linux/fs_struct.h>
 #include <linux/bsearch.h>
 #include <linux/sort.h>
+#include <linux/ima.h>
 
 static struct kmem_cache *user_ns_cachep __read_mostly;
 static DEFINE_MUTEX(userns_state_mutex);
@@ -141,8 +142,21 @@ int create_user_ns(struct cred *new)
 	if (!setup_userns_sysctls(ns))
 		goto fail_keyring;
 
+#if CONFIG_IMA
+	ns->ima_ns_for_children = copy_ima_ns(parent_ns->ima_ns, ns);
+	if (IS_ERR(ns->ima_ns_for_children)) {
+		ret = PTR_ERR(ns->ima_ns_for_children);
+		goto fail_userns_sysctls;
+	}
+	ns->ima_ns = get_ima_ns(&parent_ns->ima_ns->ns);
+#endif
+
 	set_cred_user_ns(new, ns);
 	return 0;
+#if CONFIG_IMA
+fail_userns_sysctls:
+	retire_userns_sysctls(ns);
+#endif
 fail_keyring:
 #ifdef CONFIG_PERSISTENT_KEYRINGS
 	key_put(ns->persistent_keyring_register);
@@ -196,6 +210,10 @@ static void free_user_ns(struct work_struct *work)
 			kfree(ns->projid_map.forward);
 			kfree(ns->projid_map.reverse);
 		}
+#ifdef CONFIG_IMA
+		put_ima_ns(&ns->ima_ns_for_children->ns);
+		put_ima_ns(&ns->ima_ns->ns);
+#endif
 		retire_userns_sysctls(ns);
 		key_free_user_ns(ns);
 		ns_free_inum(&ns->ns);
