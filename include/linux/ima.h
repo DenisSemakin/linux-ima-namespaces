@@ -249,6 +249,9 @@ struct ima_namespace {
 	struct list_head __rcu *ima_rules;
 	/* current content of the policy */
 	int ima_policy_flag;
+
+	struct list_head ima_measurements;
+	unsigned long binary_runtime_size;
 };
 
 extern struct ima_namespace init_ima_ns;
