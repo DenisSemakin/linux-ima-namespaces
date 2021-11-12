@@ -32,9 +32,6 @@ enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8, TPM_PCR10 = 10 };
 #define IMA_DIGEST_SIZE		SHA1_DIGEST_SIZE
 #define IMA_EVENT_NAME_LEN_MAX	255
 
-#define IMA_HASH_BITS 10
-#define IMA_MEASURE_HTABLE_SIZE (1 << IMA_HASH_BITS)
-
 #define IMA_TEMPLATE_FIELD_ID_MAX_LEN	16
 #define IMA_TEMPLATE_NUM_FIELDS_MAX	15
 
@@ -180,19 +177,6 @@ int ima_lsm_policy_change(struct notifier_block *nb, unsigned long event,
  * used to protect h_table and sha_table
  */
 extern spinlock_t ima_queue_lock;
-
-struct ima_h_table {
-	atomic_long_t len;	/* number of stored measurements in the list */
-	atomic_long_t violations;
-	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
-};
-extern struct ima_h_table ima_htable;
-
-static inline unsigned int ima_hash_key(u8 *digest)
-{
-	/* there is no point in taking a hash of part of a digest */
-	return (digest[0] | digest[1] << 8) % IMA_MEASURE_HTABLE_SIZE;
-}
 
 #define __ima_hooks(hook)				\
 	hook(NONE, none)				\
