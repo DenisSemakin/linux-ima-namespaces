@@ -49,12 +49,13 @@ static ssize_t ima_show_htable_violations(struct file *filp,
 					  char __user *buf,
 					  size_t count, loff_t *ppos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = filp->private_data;
 
 	return ima_show_htable_value(buf, count, ppos, &ns->ima_htable.violations);
 }
 
 static const struct file_operations ima_htable_violations_ops = {
+	.open = simple_open,
 	.read = ima_show_htable_violations,
 	.llseek = generic_file_llseek,
 };
@@ -63,12 +64,13 @@ static ssize_t ima_show_measurements_count(struct file *filp,
 					   char __user *buf,
 					   size_t count, loff_t *ppos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = filp->private_data;
 
 	return ima_show_htable_value(buf, count, ppos, &ns->ima_htable.len);
 }
 
 static const struct file_operations ima_measurements_count_ops = {
+	.open = simple_open,
 	.read = ima_show_measurements_count,
 	.llseek = generic_file_llseek,
 };
@@ -76,7 +78,7 @@ static const struct file_operations ima_measurements_count_ops = {
 /* returns pointer to hlist_node */
 static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = m->file->f_inode->i_private;
 	loff_t l = *pos;
 	struct ima_queue_entry *qe;
 
@@ -94,7 +96,7 @@ static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 
 static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = m->file->f_inode->i_private;
 	struct ima_queue_entry *qe = v;
 
 	/* lock protects when reading beyond last element
@@ -390,6 +392,9 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 		return seq_open(filp, &ima_policy_seqops);
 #endif
 	}
+
+	filp->private_data = inode->i_private;
+
 	if (test_and_set_bit(IMA_FS_BUSY, &ns->ima_fs_flags))
 		return -EBUSY;
 	return 0;
@@ -404,7 +409,7 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
  */
 static int ima_release_policy(struct inode *inode, struct file *file)
 {
-	struct ima_namespace *ns = get_current_ns();
+	struct ima_namespace *ns = inode->i_private;
 	const char *cause = ns->valid_policy ? "completed" : "failed";
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
@@ -463,34 +468,34 @@ int ima_fs_init(struct ima_namespace *ns)
 
 	ns->dentry[IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS] =
 	    securityfs_create_file("binary_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   S_IRUSR | S_IRGRP, ima_dir, ns,
 				   &ima_measurements_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS] =
 	    securityfs_create_file("ascii_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   S_IRUSR | S_IRGRP, ima_dir, ns,
 				   &ima_ascii_measurements_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT] =
 	    securityfs_create_file("runtime_measurements_count",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   S_IRUSR | S_IRGRP, ima_dir, ns,
 				   &ima_measurements_count_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_VIOLATIONS] =
 	    securityfs_create_file("violations", S_IRUSR | S_IRGRP,
-				   ima_dir, NULL, &ima_htable_violations_ops);
+				   ima_dir, ns, &ima_htable_violations_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_VIOLATIONS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_IMA_POLICY] =
 	    securityfs_create_file("policy", POLICY_FILE_FLAGS,
-				   ima_dir, NULL,
+				   ima_dir, ns,
 				   &ima_measure_policy_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_IMA_POLICY]))
 		goto out;
