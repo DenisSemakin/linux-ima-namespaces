@@ -40,6 +40,11 @@ static int __init default_canonical_fmt_setup(char *str)
 }
 __setup("ima_canonical_fmt", default_canonical_fmt_setup);
 
+static int ima_open(struct inode *inode, struct file *file) {
+	file->private_data = get_current_ns();
+	return 0;
+}
+
 static ssize_t ima_show_htable_value(char __user *buf, size_t count,
 				     loff_t *ppos, atomic_long_t *val)
 {
@@ -60,7 +65,7 @@ static ssize_t ima_show_htable_violations(struct file *filp,
 }
 
 static const struct file_operations ima_htable_violations_ops = {
-	.open = simple_open,
+	.open = ima_open,
 	.read = ima_show_htable_violations,
 	.llseek = generic_file_llseek,
 };
@@ -75,7 +80,7 @@ static ssize_t ima_show_measurements_count(struct file *filp,
 }
 
 static const struct file_operations ima_measurements_count_ops = {
-	.open = simple_open,
+	.open = ima_open,
 	.read = ima_show_measurements_count,
 	.llseek = generic_file_llseek,
 };
@@ -83,7 +88,7 @@ static const struct file_operations ima_measurements_count_ops = {
 /* returns pointer to hlist_node */
 static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 {
-	struct ima_namespace *ns = m->file->f_inode->i_private;
+	struct ima_namespace *ns = m->file->f_inode->i_private = get_current_ns();
 	loff_t l = *pos;
 	struct ima_queue_entry *qe;
 
@@ -392,13 +397,13 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 #else
 		if ((filp->f_flags & O_ACCMODE) != O_RDONLY)
 			return -EACCES;
-		if (!capable(CAP_SYS_ADMIN))
+		if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
 			return -EPERM;
 		return seq_open(filp, &ima_policy_seqops);
 #endif
 	}
 
-	filp->private_data = inode->i_private;
+	ima_open(inode, filp);
 
 	if (test_and_set_bit(IMA_FS_BUSY, &ns->ima_fs_flags))
 		return -EBUSY;
@@ -474,7 +479,6 @@ static const char * ima_symlink_get_link(struct dentry *dentry,
 	                   ? ns->dentry[IMAFS_DENTRY_DIR]
 	                   : ima_dir);
 	ret = nd_jump_link(&path);
-	printk(KERN_INFO "nd_jump_link: ret = %d\n", ret);
 
 	return NULL;
 }
@@ -493,7 +497,8 @@ static const struct inode_operations ima_symlink_link_iops = {
 
 int ima_ns_fs_init(struct ima_namespace *ns)
 {
-	printk(KERN_INFO "%s ENTER\n", __func__);
+	kuid_t uid = ns->user_ns->owner;
+	kgid_t gid = ns->user_ns->group;
 
 	ns->dentry[IMAFS_DENTRY_DIR] = securityfs_create_dir("ima", integrity_dir);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_DIR]))
@@ -507,44 +512,42 @@ int ima_ns_fs_init(struct ima_namespace *ns)
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS] =
-	    securityfs_create_file("binary_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, ns,
-				   &ima_measurements_ops);
+	    securityfs_create_file_owner("binary_runtime_measurements",
+					 S_IRUSR | S_IRGRP, uid, gid, ima_dir, ns,
+					 &ima_measurements_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_BINARY_RUNTIME_MEASUREMENTS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS] =
-	    securityfs_create_file("ascii_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, ns,
-				   &ima_ascii_measurements_ops);
+	    securityfs_create_file_owner("ascii_runtime_measurements",
+					 S_IRUSR | S_IRGRP, uid, gid, ima_dir, ns,
+					 &ima_ascii_measurements_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_ASCII_RUNTIME_MEASUREMENTS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT] =
-	    securityfs_create_file("runtime_measurements_count",
-				   S_IRUSR | S_IRGRP, ima_dir, ns,
-				   &ima_measurements_count_ops);
+	    securityfs_create_file_owner("runtime_measurements_count",
+					 S_IRUSR | S_IRGRP, uid, gid, ima_dir, ns,
+					 &ima_measurements_count_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_RUNTIME_MEASUREMENTS_COUNT]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_VIOLATIONS] =
-	    securityfs_create_file("violations", S_IRUSR | S_IRGRP,
-				   ima_dir, ns, &ima_htable_violations_ops);
+	    securityfs_create_file_owner("violations", S_IRUSR | S_IRGRP, uid, gid,
+					 ima_dir, ns, &ima_htable_violations_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_VIOLATIONS]))
 		goto out;
 
 	ns->dentry[IMAFS_DENTRY_IMA_POLICY] =
-	    securityfs_create_file("policy", POLICY_FILE_FLAGS,
-				   ima_dir, ns,
-				   &ima_measure_policy_ops);
+	    securityfs_create_file_owner("policy", POLICY_FILE_FLAGS, uid, gid,
+					 ima_dir, ns,
+					 &ima_measure_policy_ops);
 	if (IS_ERR(ns->dentry[IMAFS_DENTRY_IMA_POLICY]))
 		goto out;
 
-	printk(KERN_INFO "%s LEAVE OK\n", __func__);
 	return 0;
 
 out:
-	printk(KERN_INFO "%s LEAVE ERROR\n", __func__);
 	ima_ns_fs_free(ns);
 
 	return -1;
