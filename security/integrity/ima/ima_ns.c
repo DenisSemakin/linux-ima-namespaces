@@ -21,7 +21,7 @@
 
 static struct kmem_cache *imans_cachep;
 
-static struct ima_namespace *create_ima_ns(void)
+static struct ima_namespace *create_ima_ns(struct user_namespace *user_ns)
 {
 	struct ima_namespace *ns;
 	int err;
@@ -32,6 +32,7 @@ static struct ima_namespace *create_ima_ns(void)
 	printk(KERN_INFO "NEW     ima_ns: 0x%lx\n", (unsigned long)ns);
 
 	kref_init(&ns->kref);
+	ns->user_ns = user_ns;
 
 	err = ima_init_namespace(ns);
 	if (err)
@@ -62,11 +63,9 @@ struct ima_namespace *copy_ima_ns(struct ima_namespace *old_ns,
 {
 	struct ima_namespace *new_ns;
 
-	new_ns = create_ima_ns();
+	new_ns = create_ima_ns(user_ns);
 	if (IS_ERR(new_ns))
 		return new_ns;
-
-	new_ns->user_ns = user_ns;
 
 	return new_ns;
 }
