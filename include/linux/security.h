@@ -1923,6 +1923,10 @@ static inline void security_audit_rule_free(void *lsmrule)
 extern struct dentry *securityfs_create_file(const char *name, umode_t mode,
 					     struct dentry *parent, void *data,
 					     const struct file_operations *fops);
+extern struct dentry *securityfs_create_file_owner(const char *name, umode_t mode,
+						   kuid_t uid, kgid_t gid,
+						   struct dentry *parent, void *data,
+						   const struct file_operations *fops);
 extern struct dentry *securityfs_create_dir(const char *name, struct dentry *parent);
 struct dentry *securityfs_create_symlink(const char *name,
 					 struct dentry *parent,
@@ -1945,6 +1949,15 @@ static inline struct dentry *securityfs_create_file(const char *name,
 						    struct dentry *parent,
 						    void *data,
 						    const struct file_operations *fops)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline struct dentry *securityfs_create_file_owner(const char *name,
+							  umode_t mode,
+							  kuid_t uid, kgid_t gid,
+							  struct dentry *parent, void *data,
+							  const struct file_operations *fops)
 {
 	return ERR_PTR(-ENODEV);
 }

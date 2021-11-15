@@ -88,6 +88,8 @@ static struct file_system_type fs_type = {
  *        this file.
  * @iops: a point to a struct of inode_operations that should be used for
  *        this file/dir
+ * @uid: the uid of the owner of the file
+ * @gid: the gid of the owner of the file
  *
  * This is the basic "create a file/dir/symlink" function for
  * securityfs.  It allows for a wide range of flexibility in creating
@@ -105,6 +107,7 @@ static struct file_system_type fs_type = {
  * returned.
  */
 static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
+					kuid_t uid, kgid_t gid,
 					struct dentry *parent, void *data,
 					const struct file_operations *fops,
 					const struct inode_operations *iops)
@@ -147,6 +150,8 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 	inode->i_mode = mode;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
 	inode->i_private = data;
+	inode->i_uid = uid;
+	inode->i_gid = gid;
 	if (S_ISDIR(mode)) {
 		inode->i_op = &simple_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
@@ -201,9 +206,47 @@ struct dentry *securityfs_create_file(const char *name, umode_t mode,
 				      struct dentry *parent, void *data,
 				      const struct file_operations *fops)
 {
-	return securityfs_create_dentry(name, mode, parent, data, fops, NULL);
+	kuid_t uid = { 0 };
+	kgid_t gid = { 0 };
+	return securityfs_create_dentry(name, mode, uid, gid, parent, data, fops, NULL);
 }
 EXPORT_SYMBOL_GPL(securityfs_create_file);
+
+/**
+ * securityfs_create_file - create a file in the securityfs filesystem
+ *
+ * @name: a pointer to a string containing the name of the file to create.
+ * @mode: the permission that the file should have
+ * @parent: a pointer to the parent dentry for this file.  This should be a
+ *          directory dentry if set.  If this parameter is %NULL, then the
+ *          file will be created in the root of the securityfs filesystem.
+ * @data: a pointer to something that the caller will want to get to later
+ *        on.  The inode.i_private pointer will point to this value on
+ *        the open() call.
+ * @fops: a pointer to a struct file_operations that should be used for
+ *        this file.
+ * @uid: The uid of the file owner
+ * @gid: The gid of the file owner
+ *
+ * This function creates a file in securityfs with the given @name.
+ *
+ * This function returns a pointer to a dentry if it succeeds.  This
+ * pointer must be passed to the securityfs_remove() function when the file is
+ * to be removed (no automatic cleanup happens if your module is unloaded,
+ * you are responsible here).  If an error occurs, the function will return
+ * the error value (via ERR_PTR).
+ *
+ * If securityfs is not enabled in the kernel, the value %-ENODEV is
+ * returned.
+ */
+struct dentry *securityfs_create_file_owner(const char *name, umode_t mode,
+					    kuid_t uid, kgid_t gid,
+					    struct dentry *parent, void *data,
+					    const struct file_operations *fops)
+{
+	return securityfs_create_dentry(name, mode, uid, gid, parent, data, fops, NULL);
+}
+EXPORT_SYMBOL_GPL(securityfs_create_file_owner);
 
 /**
  * securityfs_create_dir - create a directory in the securityfs filesystem
@@ -264,13 +307,15 @@ struct dentry *securityfs_create_symlink(const char *name,
 {
 	struct dentry *dent;
 	char *link = NULL;
+	kuid_t uid = { 0 };
+	kgid_t gid = { 0 };
 
 	if (target) {
 		link = kstrdup(target, GFP_KERNEL);
 		if (!link)
 			return ERR_PTR(-ENOMEM);
 	}
-	dent = securityfs_create_dentry(name, S_IFLNK | 0444, parent,
+	dent = securityfs_create_dentry(name, S_IFLNK | 0444, uid, gid, parent,
 					link, NULL, iops);
 	if (IS_ERR(dent))
 		kfree(link);
